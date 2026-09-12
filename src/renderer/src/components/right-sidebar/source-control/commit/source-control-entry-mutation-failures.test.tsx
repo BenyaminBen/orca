@@ -149,13 +149,10 @@ describe('source-control entry mutation failures', () => {
     expect(lastToast().options.description).toBe('unable to write file')
   })
 
-  it('sends a discard retry back through the confirmation dialog, never straight to the mutation', async () => {
-    // Why this matters: for an untracked or added entry this mutation deletes the file permanently.
-    // Every other route to it is gated by the confirmation dialog; Retry must not be the exception.
-    const discardSingle = vi
-      .fn<(path: string) => Promise<void>>()
-      .mockRejectedValueOnce(new Error('unable to write file'))
-      .mockResolvedValueOnce(undefined)
+  it('does not put a destructive retry in the failure toast', async () => {
+    const discardSingle = vi.fn(async () => {
+      throw new Error('unable to write file')
+    })
     const { result } = renderDiscard(discardSingle)
 
     await act(async () => {
@@ -164,25 +161,8 @@ describe('source-control entry mutation failures', () => {
     await act(async () => {
       result.current.confirmPendingDiscard()
     })
-    expect(result.current.pendingDiscard).toBeNull()
-
-    await act(async () => {
-      lastToast().options.action?.onClick()
-    })
-
-    // The dialog is re-armed, and no second destructive call has run.
-    expect(result.current.pendingDiscard).toEqual({
-      kind: 'entry',
-      entry: { path: 'src/app.ts' }
-    })
+    expect(lastToast().options.action).toBeUndefined()
     expect(discardSingle).toHaveBeenCalledTimes(1)
-
-    // Only confirming it a second time re-runs the mutation.
-    await act(async () => {
-      result.current.confirmPendingDiscard()
-    })
-    expect(discardSingle).toHaveBeenNthCalledWith(2, 'src/app.ts')
-    expect(mocks.toastError).toHaveBeenCalledTimes(1)
   })
 
   it('says "delete" when the failed discard would have removed an untracked file', async () => {

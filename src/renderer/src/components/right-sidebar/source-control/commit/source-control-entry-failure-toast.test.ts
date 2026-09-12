@@ -1,6 +1,5 @@
 // @vitest-environment happy-dom
 
-import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { toastError, toastDismiss } = vi.hoisted(() => ({
@@ -14,10 +13,7 @@ vi.mock('@/store', () => ({
   useAppStore: Object.assign(() => undefined, { getState: () => storeState })
 }))
 
-import {
-  showSourceControlEntryFailureToast,
-  useRetireSourceControlEntryFailureToasts
-} from './source-control-entry-failure-toast'
+import { showSourceControlEntryFailureToast } from './source-control-entry-failure-toast'
 
 type ToastOptions = {
   id?: string
@@ -71,12 +67,12 @@ describe('showSourceControlEntryFailureToast', () => {
     expect(lastToast().options.description).toBe('index.lock exists')
   })
 
-  it('keys the toast by worktree so two repos cannot overwrite each other', () => {
+  it('uses one stable slot for entry failures', () => {
     show()
-    expect(lastToast().options.id).toBe('source-control-entry-mutation:wt-1')
+    expect(lastToast().options.id).toBe('source-control-entry-mutation')
     storeState.activeWorktreeId = 'wt-2'
     show({ worktreeId: 'wt-2', worktreeName: 'feature-b' })
-    expect(lastToast().options.id).toBe('source-control-entry-mutation:wt-2')
+    expect(lastToast().options.id).toBe('source-control-entry-mutation')
   })
 
   it('still reports a failure belonging to a worktree the user has left, naming it', () => {
@@ -100,36 +96,19 @@ describe('showSourceControlEntryFailureToast', () => {
     expect(onRetry).toHaveBeenCalledTimes(1)
   })
 
+  it('retires a Retry action that became stale after a worktree switch', () => {
+    const onRetry = vi.fn()
+    show({ onRetry })
+    storeState.activeWorktreeId = 'wt-2'
+
+    lastToast().options.action?.onClick()
+
+    expect(onRetry).not.toHaveBeenCalled()
+    expect(toastDismiss).toHaveBeenCalledWith('source-control-entry-mutation')
+  })
+
   it('omits the description when the failure carried no readable message', () => {
     show({ error: 'not an Error' })
     expect(lastToast().options.description).toBeUndefined()
-  })
-})
-
-describe('useRetireSourceControlEntryFailureToasts', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    storeState.activeWorktreeId = 'wt-1'
-  })
-
-  it('retires the outgoing worktree’s toast when the active worktree changes', () => {
-    show({ onRetry: vi.fn() })
-    const { rerender } = renderHook(
-      ({ id }: { id: string }) => useRetireSourceControlEntryFailureToasts(id),
-      { initialProps: { id: 'wt-1' } }
-    )
-    act(() => rerender({ id: 'wt-2' }))
-    expect(toastDismiss).toHaveBeenCalledWith('source-control-entry-mutation:wt-1')
-  })
-
-  it('keeps the toast when the panel merely re-renders or unmounts on a tab switch', () => {
-    show({ onRetry: vi.fn() })
-    const { rerender, unmount } = renderHook(
-      ({ id }: { id: string }) => useRetireSourceControlEntryFailureToasts(id),
-      { initialProps: { id: 'wt-1' } }
-    )
-    rerender({ id: 'wt-1' })
-    unmount()
-    expect(toastDismiss).not.toHaveBeenCalled()
   })
 })

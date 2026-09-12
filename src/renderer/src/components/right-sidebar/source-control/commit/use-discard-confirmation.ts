@@ -61,14 +61,7 @@ export function useSourceControlDiscardConfirmation({
           deleteShaped: isDeleteShapedDiscardEntry(entry),
           error,
           worktreeId: activeWorktreeId,
-          worktreeName: worktreePath ? basename(worktreePath) : null,
-          // Why re-open the dialog rather than re-run: for an untracked or added entry this deletes
-          // the file permanently, and every other route to it is gated by that confirmation. Going
-          // through the dialog also re-applies the bulk-in-progress gate and re-derives the
-          // delete/discard wording from the entry's CURRENT status, not its status when it failed.
-          onRetry: () => {
-            setPendingDiscard({ kind: 'entry', entry })
-          }
+          worktreeName: worktreePath ? basename(worktreePath) : null
         })
       }
     },
