@@ -72,7 +72,7 @@ async function requestWslWorktreePaths(
     timeoutMs: 300_000,
     maxOutputBytes: 16 * 1024
   })
-  if (result.timedOut || result.code !== 0) {
+  if (result.timedOut || result.outputTruncated || result.code !== 0) {
     throw new Error(
       `WSL workspace materialization is unverifiable. Workspace remains at "${target}". Confirm copying has exited before retrying. ${result.stderr.trim()}`
     )

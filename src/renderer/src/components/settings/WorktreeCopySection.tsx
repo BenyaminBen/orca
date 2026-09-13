@@ -22,7 +22,10 @@ import { translate } from '@/i18n/i18n'
 
 type WorktreeCopySectionProps = {
   repo: Repo
-  updateRepo: (repoId: string, updates: Partial<Repo>) => void | Promise<boolean>
+  updateRepo: (
+    repoId: string,
+    updates: Partial<Repo> | ((repo: Repo) => Partial<Repo>)
+  ) => void | Promise<boolean>
 }
 
 export function WorktreeCopySection({
@@ -98,7 +101,11 @@ export function WorktreeCopySection({
         )
         return
       }
-      if ((await updateRepo(repo.id, { worktreeCopyPaths: [...paths, trimmed] })) === false) {
+      if (
+        (await updateRepo(repo.id, (current) => ({
+          worktreeCopyPaths: [...(current.worktreeCopyPaths ?? []), trimmed]
+        }))) === false
+      ) {
         setError(
           translate(
             'worktreeCopies.saveFailed',
@@ -120,6 +127,32 @@ export function WorktreeCopySection({
     }
     setQuery('')
     setOpen(false)
+  }
+
+  const removePath = async (path: string): Promise<void> => {
+    setSaving(true)
+    try {
+      const saved = await updateRepo(repo.id, (current) => ({
+        worktreeCopyPaths: (current.worktreeCopyPaths ?? []).filter((p) => p !== path)
+      }))
+      if (saved === false) {
+        setError(
+          translate(
+            'worktreeCopies.saveFailed',
+            'Could not save these paths. Check the connection and update the Orca host if needed.'
+          )
+        )
+      }
+    } catch {
+      setError(
+        translate(
+          'worktreeCopies.saveFailed',
+          'Could not save these paths. Check the connection and update the Orca host if needed.'
+        )
+      )
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -264,9 +297,7 @@ export function WorktreeCopySection({
               size="icon-xs"
               variant="ghost"
               className="shrink-0 text-muted-foreground"
-              onClick={() =>
-                updateRepo(repo.id, { worktreeCopyPaths: paths.filter((p) => p !== path) })
-              }
+              onClick={() => void removePath(path)}
               aria-label={translate('worktreeCopies.remove', 'Remove {{path}}', { path })}
             >
               <X className="size-3" />

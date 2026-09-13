@@ -53,7 +53,7 @@ The project can also list files in `.worktreeinclude`:
 
 Orca combines the personal and project lists, removes duplicate or covered paths, and copies them once. Removing a personal entry does not exclude a project entry. Commit the project list if everyone should use it; the list names `.env`, without committing its ignored contents.
 
-Use literal repository-relative paths to ignored files or folders. Blank lines and whole-line `#` comments are allowed; globs and negation are not. The manifest is limited to 256 KiB and 1,000 entries. Tracked files already come from Git. Missing extras are reported and skipped; unsafe, nonignored, or conflicting selections need correction before preparation continues.
+Use literal repository-relative paths to ignored files or folders. Blank lines and whole-line `#` comments are allowed; globs and negation are not. The manifest is limited to 256 KiB and 1,000 entries. Tracked files already come from Git. Missing extras are reported and skipped. Personal entries that are unsafe or nonignored need correction; unsupported project manifest patterns are skipped with a warning for compatibility. Conflicting selections need correction before preparation continues.
 
 ### Fast copying is automatic
 

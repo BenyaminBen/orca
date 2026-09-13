@@ -67,7 +67,9 @@ describe('repository and project copy selection', () => {
       'ignored by Git'
     )
     await writeFile(join(source, '.worktreeinclude'), '**/.env')
-    await expect(resolveWorktreeCopySelection(source, [])).rejects.toThrow('literal')
+    const result = await resolveWorktreeCopySelection(source, [])
+    expect(result.paths).toEqual([])
+    expect(result.notices.join(' ')).toContain('unsupported .worktreeinclude')
   })
   it('uses one copy call and stops setup preparation on possible partial output', async () => {
     const { source, target } = await fixture()

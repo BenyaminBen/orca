@@ -51,7 +51,7 @@ type RepositoryPaneProps = {
   mayNeedUpdate: boolean
   updateRepo: (
     repoId: string,
-    updates: RepositoryPaneRepoUpdate,
+    updates: RepositoryPaneRepoUpdate | ((repo: Repo) => RepositoryPaneRepoUpdate),
     options?: { hostId?: ExecutionHostId }
   ) => void | Promise<boolean>
   removeProject: (repoId: string) => void
@@ -90,8 +90,10 @@ export function RepositoryPane({
   // case where local and a runtime share one repo id).
   const selectedHostId = getRepoExecutionHostId(repo)
   const updateSelectedRepo = useCallback(
-    (repoId: string, updates: RepositoryPaneRepoUpdate) =>
-      updateRepo(repoId, updates, { hostId: selectedHostId }),
+    (
+      repoId: string,
+      updates: RepositoryPaneRepoUpdate | ((repo: Repo) => RepositoryPaneRepoUpdate)
+    ) => updateRepo(repoId, updates, { hostId: selectedHostId }),
     [updateRepo, selectedHostId]
   )
   const searchQuery = useAppStore((state) => state.settingsSearchQuery)
@@ -391,7 +393,6 @@ export function RepositoryPane({
       />
     ) : null,
     !isFolder &&
-    !repo.connectionId &&
     (forceFullPaneForRepoMatch || matchesSettingsSearch(searchQuery, symlinkEntries)) ? (
       <WorktreeCopySection
         key={`copies:${selectedHostId}:${repo.id}:${repo.path}`}

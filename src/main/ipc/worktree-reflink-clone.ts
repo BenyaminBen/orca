@@ -195,7 +195,7 @@ async function cloneDirectoryWithReflink(
   try {
     // Why: reserve the final directory path before copying into it so a raced
     // user-created directory cannot be replaced by a final rename.
-    await mkdir(target)
+    await mkdir(target, { mode: sourceMode | 0o700 })
   } catch (error) {
     if (isAlreadyExistsError(error)) {
       throw new WorktreeLinkedPathTargetExistsError(target)

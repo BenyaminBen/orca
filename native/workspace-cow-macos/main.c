@@ -50,8 +50,16 @@ static int clone_tree(const char *source, const char *target) {
       case FTS_F:
       case FTS_SL:
       case FTS_SLNONE:
-        result = clonefile(entry->fts_path, destination,
-                           CLONE_NOFOLLOW | CLONE_NOOWNERCOPY | CLONE_ACL);
+        {
+          const uint32_t clone_flags = CLONE_NOFOLLOW | CLONE_NOOWNERCOPY | CLONE_ACL;
+          result = clonefile(entry->fts_path, destination, clone_flags);
+          // CLONE_ACL is defined by newer SDKs but rejected by some older kernels.
+          // Retry without ACL copying; the destination still inherits its directory ACL.
+          if (result != 0 && errno == EINVAL) {
+            result = clonefile(entry->fts_path, destination,
+                               CLONE_NOFOLLOW | CLONE_NOOWNERCOPY);
+          }
+        }
         break;
       default:
         errno = ENOTSUP;

@@ -1,7 +1,11 @@
 import { isDescendantOrEqual } from '../ipc/filesystem-path-containment'
 import { lstat, readFile } from 'node:fs/promises'
 import { join, resolve, relative } from 'node:path'
-import { parseWorktreeIncludeFile, isWorktreeCopyPathList } from '../../shared/worktree-copy-paths'
+import {
+  parseWorktreeIncludeFile,
+  isWorktreeCopyPathList,
+  isWorktreeCopyPath
+} from '../../shared/worktree-copy-paths'
 import { checkIgnoredPaths } from './check-ignored-paths'
 import { mapWithConcurrency } from '../../shared/map-with-concurrency'
 
@@ -42,16 +46,13 @@ export async function resolveWorktreeCopySelection(
       throw error
     }
   }
-  for (const [origin, paths] of [
-    ['Repository settings', personal],
-    ['.worktreeinclude', project]
-  ] as const) {
-    if (!isWorktreeCopyPathList(paths)) {
-      throw new Error(
-        `${origin}: use at most 1,000 literal repository-relative paths, without patterns or traversal.`
-      )
-    }
+  if (!isWorktreeCopyPathList(personal)) {
+    throw new Error(
+      'Repository settings: use at most 1,000 literal repository-relative paths, without patterns or traversal.'
+    )
   }
+  const invalidProject = project.filter((path) => !isWorktreeCopyPath(path))
+  project = project.filter(isWorktreeCopyPath).slice(0, 1000)
   const candidates = [...new Set([...personal, ...project])]
   const existing = await mapWithConcurrency(candidates, 8, async (path) => {
     try {
@@ -65,12 +66,18 @@ export async function resolveWorktreeCopySelection(
     }
   })
   const missing = candidates.filter((_, index) => existing[index] === null)
-  const notices = missing.slice(0, 5).map((path) => {
-    const name = path.length > 160 ? `${path.slice(0, 157)}…` : path
-    return `${name}: nothing to copy from the primary checkout.`
-  })
-  if (missing.length > notices.length) {
-    notices.push(`${missing.length - notices.length} more selected paths were absent.`)
+  const notices =
+    invalidProject.length > 0
+      ? [`${invalidProject.length} unsupported .worktreeinclude entries were skipped.`]
+      : []
+  notices.push(
+    ...missing.slice(0, 5).map((path) => {
+      const name = path.length > 160 ? `${path.slice(0, 157)}…` : path
+      return `${name}: nothing to copy from the primary checkout.`
+    })
+  )
+  if (missing.length > 5) {
+    notices.push(`${missing.length - 5} more selected paths were absent.`)
   }
   const present = existing.filter((path): path is string => path !== null)
   const ignored = new Set(present.length ? await checkIgnoredPaths(source, present) : [])

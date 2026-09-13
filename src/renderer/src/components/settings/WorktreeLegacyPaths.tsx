@@ -12,7 +12,10 @@ export function WorktreeLegacyPaths({
   updateRepo
 }: {
   repo: Repo
-  updateRepo: (id: string, updates: Partial<Repo>) => void | Promise<boolean>
+  updateRepo: (
+    id: string,
+    updates: Partial<Repo> | ((repo: Repo) => Partial<Repo>)
+  ) => void | Promise<boolean>
 }): React.JSX.Element | null {
   const [converting, setConverting] = useState<string | null>(null)
   const [error, setError] = useState('')
@@ -37,10 +40,10 @@ export function WorktreeLegacyPaths({
         )
         return
       }
-      const saved = await updateRepo(repo.id, {
-        worktreeCopyPaths: [...new Set([...(repo.worktreeCopyPaths ?? []), converting])],
-        symlinkPaths: repo.symlinkPaths?.filter((p) => p !== converting)
-      })
+      const saved = await updateRepo(repo.id, (current) => ({
+        worktreeCopyPaths: [...new Set([...(current.worktreeCopyPaths ?? []), converting])],
+        symlinkPaths: current.symlinkPaths?.filter((p) => p !== converting)
+      }))
       if (saved === false) {
         setError(
           translate(
@@ -62,6 +65,33 @@ export function WorktreeLegacyPaths({
       setSaving(false)
     }
   }
+  const removeLegacy = async (path: string): Promise<void> => {
+    setSaving(true)
+    try {
+      if (
+        (await updateRepo(repo.id, (current) => ({
+          symlinkPaths: current.symlinkPaths?.filter((p) => p !== path)
+        }))) === false
+      ) {
+        setError(
+          translate(
+            'worktreeCopies.saveFailed',
+            'Could not save these paths. Check the connection and update the Orca host if needed.'
+          )
+        )
+      }
+    } catch {
+      setError(
+        translate(
+          'worktreeCopies.saveFailed',
+          'Could not save these paths. Check the connection and update the Orca host if needed.'
+        )
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div className="space-y-2 border-t border-border pt-4">
       <h4 className="text-sm font-medium">{translate('worktreeCopies.legacy', 'Legacy paths')}</h4>
@@ -92,9 +122,7 @@ export function WorktreeLegacyPaths({
             aria-label={translate('worktreeCopies.removeLegacy', 'Remove legacy {{path}}', {
               path
             })}
-            onClick={() =>
-              updateRepo(repo.id, { symlinkPaths: repo.symlinkPaths?.filter((p) => p !== path) })
-            }
+            onClick={() => void removeLegacy(path)}
           >
             <X className="size-3" />
           </Button>
@@ -115,12 +143,12 @@ export function WorktreeLegacyPaths({
           <Button size="sm" variant="ghost" disabled={saving} onClick={() => setConverting(null)}>
             {translate('worktreeCopies.cancel', 'Cancel')}
           </Button>
-          {error && (
-            <p role="alert" className="text-xs text-destructive">
-              {error}
-            </p>
-          )}
         </div>
+      )}
+      {error && (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
       )}
     </div>
   )
