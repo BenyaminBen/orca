@@ -393,7 +393,11 @@ export function RepositoryPane({
     !isFolder &&
     !repo.connectionId &&
     (forceFullPaneForRepoMatch || matchesSettingsSearch(searchQuery, symlinkEntries)) ? (
-      <WorktreeCopySection key="symlinks" repo={repo} updateRepo={updateSelectedRepo} />
+      <WorktreeCopySection
+        key={`copies:${selectedHostId}:${repo.id}:${repo.path}`}
+        repo={repo}
+        updateRepo={updateSelectedRepo}
+      />
     ) : null,
     !isFolder &&
     (forceFullPaneForRepoMatch || matchesSettingsSearch(searchQuery, sparsePresetEntries)) ? (

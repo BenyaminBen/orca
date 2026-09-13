@@ -1,6 +1,5 @@
 import { worktreeCopyContext } from './worktree-copy-context'
 import { useEffect, useState } from 'react'
-import { getRepoExecutionHostId } from '../../../../shared/execution-host'
 import { getRepoMainWorktreeId } from '../../../../shared/worktree/id'
 import { parseWorktreeIncludeFile } from '../../../../shared/worktree-copy-paths'
 import type { Repo } from '../../../../shared/repo-types'
@@ -12,13 +11,10 @@ import { translate } from '@/i18n/i18n'
 
 export function WorktreeCopyProjectPaths({ repo }: { repo: Repo }): React.JSX.Element {
   const [result, setResult] = useState<{
-    key: string
     paths: string[]
     exists: boolean
     error?: string
   }>()
-  const hostId = getRepoExecutionHostId(repo)
-  const key = `${hostId}:${repo.id}:${repo.path}`
   const openFile = useAppStore((s) => s.openFile)
   const setActiveWorktree = useAppStore((s) => s.setActiveWorktree)
   const setActiveView = useAppStore((s) => s.setActiveView)
@@ -36,7 +32,6 @@ export function WorktreeCopyProjectPaths({ repo }: { repo: Repo }): React.JSX.El
           : null
         if (!cancelled) {
           setResult({
-            key,
             exists,
             paths: file && !file.isBinary ? parseWorktreeIncludeFile(file.content) : []
           })
@@ -45,7 +40,6 @@ export function WorktreeCopyProjectPaths({ repo }: { repo: Repo }): React.JSX.El
       .catch(() => {
         if (!cancelled) {
           setResult({
-            key,
             exists: false,
             paths: [],
             error: translate(
@@ -58,19 +52,18 @@ export function WorktreeCopyProjectPaths({ repo }: { repo: Repo }): React.JSX.El
     return () => {
       cancelled = true
     }
-  }, [hostId, key, repo, worktreeId, filePath])
+  }, [repo, filePath])
 
-  const current = result?.key === key ? result : undefined
   return (
-    <div className="space-y-2 rounded-xl border border-border p-4">
+    <div className="space-y-2 border-t border-border px-4 py-3">
       <div className="flex items-center justify-between gap-3">
-        <h4 className="text-sm font-medium">
-          {translate('worktreeCopies.project', 'From .worktreeinclude')}
+        <h4 className="font-mono text-xs font-medium">
+          {translate('worktreeCopies.project', '.worktreeinclude')}
         </h4>
-        {current?.exists && (
+        {result?.exists && (
           <Button
             variant="ghost"
-            size="sm"
+            size="xs"
             onClick={() => {
               setActiveWorktree(worktreeId)
               openFile({
@@ -90,17 +83,17 @@ export function WorktreeCopyProjectPaths({ repo }: { repo: Repo }): React.JSX.El
       <p className="text-xs text-muted-foreground">
         {translate(
           'worktreeCopies.projectDescription',
-          'Project paths are also copied. Add one ignored file or folder per line; patterns are not supported. Removing a personal entry does not remove a project entry.'
+          'Added by the project. Edit this file to change these paths.'
         )}
       </p>
-      {current?.error ? (
+      {result?.error ? (
         <p role="status" className="text-xs text-muted-foreground">
-          {current.error}
+          {result.error}
         </p>
       ) : (
         <p className="break-words font-mono text-xs">
-          {current
-            ? current.paths.join(', ') ||
+          {result
+            ? result.paths.join(' · ') ||
               translate('worktreeCopies.noProject', 'No project paths listed.')
             : translate('worktreeCopies.loading', 'Reading project list…')}
         </p>

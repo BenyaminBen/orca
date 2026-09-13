@@ -53,8 +53,6 @@ export async function resolveWorktreeCopySelection(
     }
   }
   const candidates = [...new Set([...personal, ...project])]
-  const notices: string[] = []
-  let missingCount = 0
   const existing = await mapWithConcurrency(candidates, 8, async (path) => {
     try {
       await lstat(join(source, path))
@@ -63,16 +61,16 @@ export async function resolveWorktreeCopySelection(
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         throw error
       }
-      missingCount++
-      if (notices.length < 5) {
-        const name = path.length > 160 ? `${path.slice(0, 157)}…` : path
-        notices.push(`${name}: nothing to copy from the primary checkout.`)
-      }
       return null
     }
   })
-  if (missingCount > notices.length) {
-    notices.push(`${missingCount - notices.length} more selected paths were absent.`)
+  const missing = candidates.filter((_, index) => existing[index] === null)
+  const notices = missing.slice(0, 5).map((path) => {
+    const name = path.length > 160 ? `${path.slice(0, 157)}…` : path
+    return `${name}: nothing to copy from the primary checkout.`
+  })
+  if (missing.length > notices.length) {
+    notices.push(`${missing.length - notices.length} more selected paths were absent.`)
   }
   const present = existing.filter((path): path is string => path !== null)
   const ignored = new Set(present.length ? await checkIgnoredPaths(source, present) : [])

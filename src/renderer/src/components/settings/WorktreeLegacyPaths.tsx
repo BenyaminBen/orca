@@ -63,12 +63,12 @@ export function WorktreeLegacyPaths({
     }
   }
   return (
-    <div className="space-y-3 rounded-xl border border-border p-4">
+    <div className="space-y-2 border-t border-border pt-4">
       <h4 className="text-sm font-medium">{translate('worktreeCopies.legacy', 'Legacy paths')}</h4>
       <p className="text-xs text-muted-foreground">
         {translate(
           'worktreeCopies.legacyDescription',
-          'These older entries use a private clone when possible, otherwise a shared link. They keep this behavior until you choose copies for future worktrees.'
+          'These older settings may share edits with the primary checkout. Switch to copies to keep future worktrees independent.'
         )}
       </p>
       {repo.symlinkPaths.map((path) => (

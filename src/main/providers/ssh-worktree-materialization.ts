@@ -15,7 +15,7 @@ export async function requestSshWorktreeMaterialization(
     copyPaths !== undefined && (await probeSshWorktreeMaterializationCapability(mux, 2))
   const unsupportedWarning =
     copyPaths?.length && !supportsCopies
-      ? `This host needs an update to copy repository Settings paths: ${copyPaths.join(', ')}. No shared links were substituted.`
+      ? 'This host needs an update to copy files from Repository settings. No shared links were substituted.'
       : undefined
   const result = await mux.request(
     'fs.materializeWorktreePaths',

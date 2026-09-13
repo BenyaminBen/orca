@@ -7,12 +7,14 @@ export async function materializeSshWorktreePaths(
   linkedPaths: readonly string[],
   copyPaths?: readonly string[]
 ): Promise<string | undefined> {
-  if (!provider?.materializeWorktreePaths) {
-    return 'This SSH host cannot materialize workspace paths. Update the host and copy required files manually.'
-  }
   try {
-    const result = await provider.materializeWorktreePaths(source, target, linkedPaths, copyPaths)
-    return result.supported
+    const result = await provider?.materializeWorktreePaths?.(
+      source,
+      target,
+      linkedPaths,
+      copyPaths
+    )
+    return result?.supported
       ? result.warning
       : 'This SSH host cannot materialize workspace paths. Update the host and copy required files manually.'
   } catch (error) {

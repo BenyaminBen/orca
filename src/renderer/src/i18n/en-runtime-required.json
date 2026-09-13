@@ -1532,7 +1532,8 @@
           "9ea912d811": "1 path",
           "b07ef5a8b6": "Paths to materialize from the primary checkout into newly created worktrees.",
           "b814c618e2": "Configured paths",
-          "d72ba8dc68": "{{value0}} paths"
+          "d72ba8dc68": "{{value0}} paths",
+          "ea06227efa": "added"
         },
         "WslCliRegistration": {
           "41a1480d3e": "install",
