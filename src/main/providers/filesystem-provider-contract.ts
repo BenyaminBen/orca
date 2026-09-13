@@ -54,7 +54,8 @@ export type IFilesystemProvider = {
   materializeWorktreePaths?(
     source: string,
     target: string,
-    linkedPaths: readonly string[]
+    linkedPaths: readonly string[],
+    copyPaths?: readonly string[]
   ): Promise<WorktreePathMaterializationResult>
   readDir(dirPath: string): Promise<DirEntry[]>
   readFile(filePath: string, limits?: FileReadLimits): Promise<FileReadResult>

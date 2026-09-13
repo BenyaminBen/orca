@@ -1,5 +1,14 @@
+import { readRuntimeDirectory } from '../../runtime/runtime-file-client'
+import { getRuntimeGitIgnoredPaths } from '../../runtime/runtime-git-status-client'
+import { worktreeCopyContext } from './worktree-copy-context'
+import { WorktreeLegacyPaths } from './WorktreeLegacyPaths'
+import {
+  isWorktreeCopyPath,
+  parseWorktreeIncludeFile
+} from '../../../../shared/worktree-copy-paths'
+import { WorktreeCopyProjectPaths } from './WorktreeCopyProjectPaths'
 import { useEffect, useMemo, useState } from 'react'
-import { Folder, Link2, Plus, X } from 'lucide-react'
+import { Folder, Plus, X } from 'lucide-react'
 import type { Repo } from '../../../../shared/repo-types'
 import { Button } from '../ui/button'
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from '../ui/command'
@@ -12,11 +21,11 @@ import {
   type WorktreeSymlinkPathSuggestion
 } from './worktree-symlink-path-filter'
 import { translate } from '@/i18n/i18n'
-import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
+import { getRepoExecutionHostId } from '../../../../shared/execution-host'
 
-type WorktreeSymlinksSectionProps = {
+type WorktreeCopySectionProps = {
   repo: Repo
-  updateRepo: (repoId: string, updates: Partial<Repo>) => void
+  updateRepo: (repoId: string, updates: Partial<Repo>) => void | Promise<boolean>
 }
 
 type DirectorySuggestionState = {
@@ -24,20 +33,19 @@ type DirectorySuggestionState = {
   entries: WorktreeSymlinkPathSuggestion[]
 }
 
-const EMPTY_WORKTREE_SYMLINK_PATHS: readonly string[] = []
+const EMPTY_WORKTREE_COPY_PATHS: readonly string[] = []
 
-export function WorktreeSymlinksSection({
+export function WorktreeCopySection({
   repo,
   updateRepo
-}: WorktreeSymlinksSectionProps): React.JSX.Element {
+}: WorktreeCopySectionProps): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
 
-  const paths = repo.symlinkPaths ?? EMPTY_WORKTREE_SYMLINK_PATHS
-  // Why: the pane may show a non-focused runtime host; only inspect the local
-  // filesystem when the switcher-selected repo is actually local.
-  const useLocalDirectorySuggestions = getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID
-  const directorySuggestionKey = `${repo.path}\n${repo.connectionId ?? ''}`
+  const paths = repo.worktreeCopyPaths ?? EMPTY_WORKTREE_COPY_PATHS
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const directorySuggestionKey = `${getRepoExecutionHostId(repo)}:${repo.id}:${repo.path}`
   const [directorySuggestions, setDirectorySuggestions] = useState<DirectorySuggestionState>(
     () => ({
       requestKey: directorySuggestionKey,
@@ -46,19 +54,24 @@ export function WorktreeSymlinksSection({
   )
 
   useEffect(() => {
-    if (!useLocalDirectorySuggestions) {
-      return
-    }
     let cancelled = false
-    void window.api.fs
-      .readDir({ dirPath: repo.path, connectionId: repo.connectionId ?? undefined })
-      .then((list) => {
+    const context = worktreeCopyContext(repo)
+    void readRuntimeDirectory(context, repo.path)
+      .then(async (list) => {
+        const ignored = new Set(
+          await getRuntimeGitIgnoredPaths(
+            context,
+            list.map((entry) => entry.name)
+          )
+        )
         if (cancelled) {
           return
         }
         setDirectorySuggestions({
           requestKey: directorySuggestionKey,
-          entries: list.map((entry) => ({ name: entry.name, isDirectory: entry.isDirectory }))
+          entries: list
+            .filter((entry) => ignored.has(entry.name))
+            .map((entry) => ({ name: entry.name, isDirectory: entry.isDirectory }))
         })
       })
       .catch(() => {
@@ -68,44 +81,80 @@ export function WorktreeSymlinksSection({
     return () => {
       cancelled = true
     }
-  }, [useLocalDirectorySuggestions, repo.path, repo.connectionId, directorySuggestionKey])
+  }, [repo, directorySuggestionKey])
 
   const { queryTrimmed, filtered, showLiteralItem } = useMemo(() => {
     const suggestionEntries =
-      useLocalDirectorySuggestions && directorySuggestions.requestKey === directorySuggestionKey
-        ? directorySuggestions.entries
-        : []
+      directorySuggestions.requestKey === directorySuggestionKey ? directorySuggestions.entries : []
     return getWorktreeSymlinkPathFilterState({
       query,
       suggestions: suggestionEntries,
       existingPaths: paths
     })
-  }, [query, paths, directorySuggestionKey, directorySuggestions, useLocalDirectorySuggestions])
+  }, [query, paths, directorySuggestionKey, directorySuggestions])
 
-  const commit = (rawName: string): void => {
-    const trimmed = rawName.trim().replace(/^\/+/, '')
+  const commit = async (rawName: string): Promise<void> => {
+    const trimmed = parseWorktreeIncludeFile(rawName)[0] ?? ''
+    if (!isWorktreeCopyPath(trimmed)) {
+      setError(
+        translate(
+          'worktreeCopies.invalid',
+          'Use a literal path inside this repository, such as .env. Patterns and parent paths are not supported.'
+        )
+      )
+      return
+    }
+    setError('')
     if (!trimmed || paths.includes(trimmed)) {
       setQuery('')
       return
     }
-    updateRepo(repo.id, { symlinkPaths: [...paths, trimmed] })
+    setSaving(true)
+    try {
+      const ignored = await getRuntimeGitIgnoredPaths(worktreeCopyContext(repo), [trimmed])
+      if (!ignored.includes(trimmed)) {
+        setError(
+          translate(
+            'worktreeCopies.notIgnored',
+            'Choose a file or folder ignored by Git. Tracked files already come from the chosen branch.'
+          )
+        )
+        return
+      }
+      if ((await updateRepo(repo.id, { worktreeCopyPaths: [...paths, trimmed] })) === false) {
+        setError(
+          translate(
+            'worktreeCopies.saveFailed',
+            'Could not save these paths. Check the connection and update the Orca host if needed.'
+          )
+        )
+        return
+      }
+    } catch {
+      setError(
+        translate(
+          'worktreeCopies.validationFailed',
+          'Could not validate this path on its host. Check the connection and try again.'
+        )
+      )
+      return
+    } finally {
+      setSaving(false)
+    }
     setQuery('')
     setOpen(false)
   }
 
   const handleRemove = (path: string): void => {
-    updateRepo(repo.id, { symlinkPaths: paths.filter((p) => p !== path) })
+    updateRepo(repo.id, { worktreeCopyPaths: paths.filter((p) => p !== path) })
   }
 
   return (
     <SearchableSetting
-      title={translate(
-        'auto.components.settings.WorktreeSymlinksSection.4755f120b6',
-        'Paths for New Worktrees'
-      )}
+      title={translate('worktreeCopies.title', 'Files to copy')}
       description={translate(
-        'auto.components.settings.WorktreeSymlinksSection.b07ef5a8b6',
-        'Paths to materialize from the primary checkout into newly created worktrees.'
+        'worktreeCopies.description',
+        'Personal files to copy for this repository and host, in addition to .worktreeinclude.'
       )}
       keywords={[
         repo.displayName,
@@ -125,23 +174,20 @@ export function WorktreeSymlinksSection({
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
           <h3 className="text-sm font-semibold">
-            {translate(
-              'auto.components.settings.WorktreeSymlinksSection.4755f120b6',
-              'Paths for New Worktrees'
-            )}
+            {translate('worktreeCopies.title', 'Files to copy')}
           </h3>
           <p className="text-xs text-muted-foreground">
             {translate(
-              'auto.components.settings.WorktreeSymlinksSection.7ff265071d',
-              'New worktrees get private copy-on-write copies when supported by their host filesystem. Otherwise, these paths link to the primary checkout and share edits.'
+              'worktreeCopies.explanation',
+              'For this repository and host only. New worktrees get their own copies of these ignored files and folders from the primary checkout. Fast copying is automatic; a failed copy never becomes a shared link.'
             )}
           </p>
         </div>
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
-            <Button type="button" variant="outline" size="sm">
+            <Button type="button" variant="outline" size="sm" disabled={saving}>
               <Plus className="size-3.5" />
-              {translate('auto.components.settings.WorktreeSymlinksSection.241325302c', 'Add Path')}
+              {translate('worktreeCopies.add', 'Add path')}
             </Button>
           </PopoverTrigger>
           <PopoverContent align="end" className="w-72 p-0">
@@ -213,68 +259,55 @@ export function WorktreeSymlinksSection({
         </Popover>
       </div>
 
+      {error && (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      )}
+      <p className="break-all text-xs text-muted-foreground">
+        {translate('worktreeCopies.source', 'Source: {{path}}', { path: repo.path })}
+      </p>
       {paths.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border/60 bg-background/60 px-4 py-6 text-sm text-muted-foreground">
           {translate(
-            'auto.components.settings.WorktreeSymlinksSection.31ebab5403',
-            'No paths configured for this repository.'
+            'worktreeCopies.empty',
+            'No personal paths added. Project paths in .worktreeinclude still apply.'
           )}
         </div>
       ) : (
-        <div className="rounded-xl border border-border/50 bg-background/70 px-4 py-3 shadow-sm">
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-muted/30">
-              <Link2 className="size-4 text-muted-foreground" />
-            </div>
-            <div className="min-w-0 flex-1 space-y-2">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <h4 className="text-sm font-medium">
-                  {translate(
-                    'auto.components.settings.WorktreeSymlinksSection.b814c618e2',
-                    'Configured paths'
-                  )}
-                </h4>
-                <span className="text-[11px] text-muted-foreground">
-                  {paths.length === 1
-                    ? translate(
-                        'auto.components.settings.WorktreeSymlinksSection.9ea912d811',
-                        '1 path'
-                      )
-                    : translate(
-                        'auto.components.settings.WorktreeSymlinksSection.d72ba8dc68',
-                        '{{value0}} paths',
-                        { value0: paths.length }
-                      )}
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {paths.map((path) => (
-                  <span
-                    key={path}
-                    title={path}
-                    className="inline-flex min-w-0 max-w-full items-center gap-1 truncate rounded-md border border-border/50 bg-muted/35 py-1 pl-2 pr-1 font-mono text-[11px] text-foreground/80"
-                  >
-                    <span className="truncate">{path}</span>
-                    <Button
-                      size="icon-xs"
-                      variant="ghost"
-                      onClick={() => handleRemove(path)}
-                      aria-label={translate(
-                        'auto.components.settings.WorktreeSymlinksSection.1c1e35b219',
-                        'Remove {{value0}}',
-                        { value0: path }
-                      )}
-                      className="size-4 shrink-0 rounded-sm"
-                    >
-                      <X className="size-3" />
-                    </Button>
-                  </span>
-                ))}
-              </div>
-            </div>
+        <div className="space-y-2 rounded-xl border border-border p-4">
+          <h4 className="text-sm font-medium">
+            {translate('worktreeCopies.personal', 'Your additions')}
+          </h4>
+          <div className="flex flex-wrap gap-2">
+            {paths.map((path) => (
+              <span
+                key={path}
+                className="inline-flex max-w-full items-center gap-2 rounded-md bg-muted px-2 py-1 font-mono text-xs"
+              >
+                <span className="truncate">{path}</span>
+                <Button
+                  size="icon-xs"
+                  variant="ghost"
+                  onClick={() => handleRemove(path)}
+                  aria-label={translate('worktreeCopies.remove', 'Remove {{path}}', { path })}
+                >
+                  <X className="size-3" />
+                </Button>
+              </span>
+            ))}
           </div>
         </div>
       )}
+
+      <WorktreeCopyProjectPaths repo={repo} />
+      <p className="text-xs text-muted-foreground">
+        {translate(
+          'worktreeCopies.limits',
+          'Copies are limited to 2 GiB of ordinary copying and 50,000 entries. Use setup to install dependencies. Sharing is an explicit choice in orca.yaml. Links inside copied folders keep their targets.'
+        )}
+      </p>
+      <WorktreeLegacyPaths repo={repo} updateRepo={updateRepo} />
     </SearchableSetting>
   )
 }

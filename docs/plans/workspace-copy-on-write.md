@@ -8,16 +8,16 @@ session artifacts, not files required at runtime.
 
 | Input | Preferred behavior | Fallback |
 | --- | --- | --- |
-| Worktree Shared Paths | Private CoW copy | Shared symlink; junction first for Windows directories |
-| `.worktreeinclude` | Private CoW copy | Private byte copy admitted by a cumulative budget |
+| Legacy Settings paths | Private CoW copy | Shared symlink; junction first for Windows directories |
+| Repository Files to copy + `.worktreeinclude` | Private CoW copy | Private byte copy admitted by a cumulative budget |
 | YAML `sharedDirectories` | Shared link | Existing platform link policy |
 
 Existing destinations survive. Copy mode resolves a top-level source symlink;
 nested symlinks remain verbatim, including dangling links. Relative package links
 therefore continue to work within the private copy. External nested links still
 share their external referent. Destination files are never hardlinked to source
-files. Existing config precedence and requested Git branch/base checkout semantics
-remain unchanged. Ordinary directories can be materializer inputs; registering a
+files. New copy rules reject sharing conflicts; older wire callers retain their versioned
+precedence. Requested Git branch/base checkout semantics remain unchanged. Ordinary directories can be materializer inputs; registering a
 folder workspace does not start a new cloning lifecycle or require `.git`.
 
 CoW shares initial data blocks, not future writes or directory entries. All selected
@@ -67,10 +67,33 @@ source identity under open processes. Those lifecycle changes are outside this
 optimization. A dependency seed store needs a separate design for cache identity,
 platform/ABI, trust, mutation isolation and eviction.
 
+## Repository copy selection
+
+Repository settings → **Files to copy** stores `worktreeCopyPaths` on the selected
+repository/host row. It adds to literal `.worktreeinclude` paths; one validated,
+deduplicated union reaches the existing copy executor and budget. New selections
+never enter the legacy clone-or-link mode. Gitignored-only validation runs in the
+picker and again on the execution host. Existing destinations are preserved.
+
+A small preflight rejects copy/share/legacy overlaps and unsafe target ancestry
+before extra-file mutations. Real source identities also catch case aliases and
+linked-source aliases. Missing paths produce creation notices; incomplete output
+stops dependent setup. Legacy entries keep their stored semantics until explicitly
+converted, after an ignored-path check and a future-worktree-only preview.
+
+The renderer reuses host-aware Git and filesystem clients for validation and project
+list inspection. Repository settings belong to the owning runtime, not a per-account
+secret store; another client of that runtime sees the same configuration.
+
 ## Execution hosts and compatibility
 
-SSH advertises optional `worktreeMaterializationVersion: 1` through the incumbent
-filesystem capability cache. New clients call `fs.materializeWorktreePaths` only
+SSH advertises optional `worktreeMaterializationVersion: 2` through the incumbent
+filesystem capability cache. Version 2 accepts optional `copyPaths`; omission
+retains the v1 ordering and error policy. A v1 host receives no personal copy
+selection and returns an update warning rather than a downgrade to links.
+Paired runtime settings writes require `repo.worktree-copy-paths.v1` before sending
+any migration update, so an old schema cannot drop the copy field while removing
+the legacy entry. New clients call `fs.materializeWorktreePaths` only
 when supported. The host reads its own includes, YAML and Git ignore configuration.
 Old hosts get no unknown method and return an explicit unsupported warning. Transport
 errors are unverifiable and stop creation before setup; clients never copy remotely

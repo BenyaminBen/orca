@@ -64,9 +64,12 @@ export function probeSshRangedReadCapability(
 }
 
 export function probeSshWorktreeMaterializationCapability(
-  mux: SshChannelMultiplexer
+  mux: SshChannelMultiplexer,
+  version = 1
 ): Promise<boolean> {
   return readSshFsCapabilities(mux).then(
-    (capabilities) => capabilities?.worktreeMaterializationVersion === 1
+    (capabilities) =>
+      typeof capabilities?.worktreeMaterializationVersion === 'number' &&
+      capabilities.worktreeMaterializationVersion >= version
   )
 }

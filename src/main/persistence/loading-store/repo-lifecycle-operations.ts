@@ -174,6 +174,7 @@ export class RepoLifecycleOperations {
         | 'kind'
         | 'executionHostId'
         | 'symlinkPaths'
+        | 'worktreeCopyPaths'
         | 'issueSourcePreference'
         | 'forkSyncMode'
         | 'externalWorktreeVisibilityPromptDismissedAt'

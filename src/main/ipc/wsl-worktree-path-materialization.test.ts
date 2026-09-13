@@ -15,13 +15,20 @@ const result = {
 }
 
 describe('WSL materialization routing', () => {
-  it('dispatches converted paths on the selected distro', async () => {
+  it('dispatches converted paths and personal copies on the selected distro', async () => {
     const run = vi.fn().mockResolvedValue(result)
     await expect(
-      materializeWslWorktreePaths('Ubuntu', 'C:\\repo', '/home/test/worktree', ['deps'], {
-        readBundle: async () => '// bundled materializer',
-        run
-      })
+      materializeWslWorktreePaths(
+        'Ubuntu',
+        'C:\\repo',
+        '/home/test/worktree',
+        ['deps'],
+        {
+          readBundle: async () => '// bundled materializer',
+          run
+        },
+        ['.env.local']
+      )
     ).resolves.toBeUndefined()
     expect(run).toHaveBeenCalledWith(
       expect.objectContaining({ distro: 'Ubuntu', loginPath: 'preferred', timeoutMs: 300_000 })
@@ -31,7 +38,8 @@ describe('WSL materialization routing', () => {
     expect(JSON.parse(Buffer.from(encoded, 'base64').toString())).toEqual({
       source: '/mnt/c/repo',
       target: '/home/test/worktree',
-      linkedPaths: ['deps']
+      linkedPaths: ['deps'],
+      copyPaths: ['.env.local']
     })
   })
 

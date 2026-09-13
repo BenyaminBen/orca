@@ -41,6 +41,38 @@ describe('SSH worktree materialization compatibility', () => {
     )
   })
 
+  it('does not downgrade personal copies on a v1 host and caches the capability probe', async () => {
+    const { provider, mux } = providerWithCapabilities({ worktreeMaterializationVersion: 1 })
+    const result = await provider.materializeWorktreePaths(
+      '/source',
+      '/target',
+      ['legacy'],
+      ['.env']
+    )
+    expect(result.warning).toContain('needs an update')
+    expect(mux.request).toHaveBeenLastCalledWith(
+      'fs.materializeWorktreePaths',
+      { source: '/source', target: '/target', linkedPaths: ['legacy'] },
+      { timeoutMs: 300_000 }
+    )
+    await provider.materializeWorktreePaths('/source', '/target2', [], ['.env'])
+    expect(
+      mux.request.mock.calls.filter(([method]) => method === 'fs.getCapabilities')
+    ).toHaveLength(1)
+  })
+
+  it('sends explicit private selections only to a capable host', async () => {
+    const { provider, mux } = providerWithCapabilities({ worktreeMaterializationVersion: 2 })
+    expect(await provider.materializeWorktreePaths('/source', '/target', [], ['.env'])).toEqual({
+      supported: true
+    })
+    expect(mux.request).toHaveBeenLastCalledWith(
+      'fs.materializeWorktreePaths',
+      { source: '/source', target: '/target', linkedPaths: [], copyPaths: ['.env'] },
+      { timeoutMs: 300_000 }
+    )
+  })
+
   it('treats lost contact as unverifiable without retrying or running locally', async () => {
     const { provider, mux } = providerWithCapabilities({ worktreeMaterializationVersion: 1 })
     mux.request.mockRejectedValue(new Error('connection closed'))

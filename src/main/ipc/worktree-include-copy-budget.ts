@@ -242,7 +242,8 @@ const MAX_NAMED_SKIPPED_ENTRIES = 5
  *  nothing was skipped so callers can spread it conditionally. */
 export function formatWorktreeIncludeCopyWarning(
   skipped: readonly SkippedWorktreeCopyPath[],
-  budget: WorktreeCopyBudget = DEFAULT_WORKTREE_COPY_BUDGET
+  budget: WorktreeCopyBudget = DEFAULT_WORKTREE_COPY_BUDGET,
+  label = '.worktreeinclude'
 ): string | undefined {
   if (skipped.length === 0) {
     return undefined
@@ -251,14 +252,16 @@ export function formatWorktreeIncludeCopyWarning(
   // so enumerating them all would put a multi-kilobyte sentence in a warning.
   const nameList = (entries: readonly SkippedWorktreeCopyPath[]): string => {
     const shown = entries.slice(0, MAX_NAMED_SKIPPED_ENTRIES)
-    const names = shown.map((entry) => `"${entry.path}"`).join(', ')
+    const names = shown
+      .map((entry) => `"${entry.path.length > 160 ? `${entry.path.slice(0, 157)}…` : entry.path}"`)
+      .join(', ')
     const rest = entries.length - shown.length
     return rest > 0 ? `${names} and ${rest.toLocaleString('en-US')} more` : names
   }
   const describe = (entries: readonly SkippedWorktreeCopyPath[]): string => {
     const subject = entries.length === 1 ? 'entry' : 'entries'
     const verb = entries.length === 1 ? 'was' : 'were'
-    return `.worktreeinclude ${subject} ${nameList(entries)} ${verb} not copied into the new workspace`
+    return `${label} ${subject} ${nameList(entries)} ${verb} not copied into the new workspace`
   }
   const pronoun = (count: number): string => (count === 1 ? 'it' : 'them')
   // Why: an entry refused because earlier ones exhausted the sizing walk never
@@ -283,7 +286,7 @@ export function formatWorktreeIncludeCopyWarning(
   }
   const interrupted = skipped.filter((entry) => entry.reason === 'interrupted')
   if (interrupted.length > 0) {
-    sentences.push(`Cloning .worktreeinclude ${nameList(interrupted)} was interrupted.`)
+    sentences.push(`Cloning ${label} ${nameList(interrupted)} was interrupted.`)
     if (interrupted.some((entry) => entry.termination === 'unverifiable')) {
       sentences.push(
         'Process termination is unverifiable; copying may still be running. Confirm it has exited before changing these paths.'

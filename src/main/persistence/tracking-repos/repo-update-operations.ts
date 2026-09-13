@@ -54,6 +54,7 @@ export class RepoUpdatePersistenceOperations {
         | 'kind'
         | 'executionHostId'
         | 'symlinkPaths'
+        | 'worktreeCopyPaths'
         | 'issueSourcePreference'
         | 'forkSyncMode'
         | 'externalWorktreeVisibilityPromptDismissedAt'

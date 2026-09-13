@@ -17846,5 +17846,34 @@
       "stopped": "stopped",
       "finished": "finished"
     }
+  },
+  "worktreeCopies": {
+    "projectUnavailable": "Could not read the project list from this host.",
+    "project": "From .worktreeinclude",
+    "openProject": "Open file",
+    "projectDescription": "Project paths are also copied. Add one ignored file or folder per line; patterns are not supported. Removing a personal entry does not remove a project entry.",
+    "noProject": "No project paths listed.",
+    "loading": "Reading project list…",
+    "legacyIneligible": "This path cannot be converted: copies require a literal path ignored by Git. The legacy entry is unchanged.",
+    "validationFailed": "Could not validate this path on its host. Check the connection and try again.",
+    "legacy": "Legacy paths",
+    "legacyDescription": "These older entries use a private clone when possible, otherwise a shared link. They keep this behavior until you choose copies for future worktrees.",
+    "convert": "Use copies…",
+    "removeLegacy": "Remove legacy {{path}}",
+    "confirm": "Move {{path}} to your copy list? It must be ignored by Git. Future worktrees will copy it or report why they cannot; existing worktrees stay unchanged.",
+    "confirmConvert": "Copy in future worktrees",
+    "cancel": "Cancel",
+    "invalid": "Use a literal path inside this repository, such as .env. Patterns and parent paths are not supported.",
+    "notIgnored": "Choose a file or folder ignored by Git. Tracked files already come from the chosen branch.",
+    "title": "Files to copy",
+    "description": "Personal files to copy for this repository and host, in addition to .worktreeinclude.",
+    "explanation": "For this repository and host only. New worktrees get their own copies of these ignored files and folders from the primary checkout. Fast copying is automatic; a failed copy never becomes a shared link.",
+    "add": "Add path",
+    "source": "Source: {{path}}",
+    "empty": "No personal paths added. Project paths in .worktreeinclude still apply.",
+    "personal": "Your additions",
+    "remove": "Remove {{path}}",
+    "limits": "Copies are limited to 2 GiB of ordinary copying and 50,000 entries. Use setup to install dependencies. Sharing is an explicit choice in orca.yaml. Links inside copied folders keep their targets.",
+    "saveFailed": "Could not save these paths. Check the connection and update the Orca host if needed."
   }
 }

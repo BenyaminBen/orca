@@ -1,3 +1,4 @@
+import { isWorktreeCopyPathList } from '../shared/worktree-copy-paths'
 import { isAbsolute, resolve } from 'node:path'
 import { realpath, stat } from 'node:fs/promises'
 import { expandTilde } from './context'
@@ -7,8 +8,9 @@ import type { WorktreePathMaterializationResult } from '../shared/worktree-path-
 export async function materializeRelayWorktreePaths(
   params: Record<string, unknown>
 ): Promise<WorktreePathMaterializationResult> {
-  const { source, target, linkedPaths } = params
+  const { source, target, linkedPaths, copyPaths } = params
   if (
+    (copyPaths !== undefined && !isWorktreeCopyPathList(copyPaths)) ||
     typeof source !== 'string' ||
     typeof target !== 'string' ||
     !isAbsolute(expandTilde(source)) ||
@@ -30,6 +32,12 @@ export async function materializeRelayWorktreePaths(
   ) {
     throw new Error('Worktree materialization requires distinct source and target directories')
   }
-  const warning = await materializeHostWorktreePaths(sourcePath, targetPath, linkedPaths)
+  const warning = await materializeHostWorktreePaths(
+    sourcePath,
+    targetPath,
+    linkedPaths,
+    undefined,
+    copyPaths as string[] | undefined
+  )
   return { supported: true, ...(warning ? { warning } : {}) }
 }

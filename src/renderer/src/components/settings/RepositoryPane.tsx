@@ -12,7 +12,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
 import { RepositoryHooksSection } from './RepositoryHooksSection'
 import { McpConfigSection } from './McpConfigSection'
-import { WorktreeSymlinksSection } from './WorktreeSymlinksSection'
+import { WorktreeCopySection } from './WorktreeCopySection'
 import { SparsePresetSettingsSection } from './SparsePresetSettingsSection'
 import { RepositorySourceControlAiSection } from './RepositorySourceControlAiSection'
 import { SearchableSetting } from './SearchableSetting'
@@ -203,7 +203,7 @@ export function RepositoryPane({
     ].includes(entry.title)
   )
   const mcpEntries = allEntries.filter((entry) => entry.title === 'MCP Configs')
-  const symlinkEntries = allEntries.filter((entry) => entry.title === 'Worktree Shared Paths')
+  const symlinkEntries = allEntries.filter((entry) => entry.title === 'Files to copy')
   const sourceControlAiEntries = allEntries.filter((entry) => entry.title === 'Git AI Author')
   const hostSetupEntries = allEntries.filter((entry) => entry.title === 'Available Hosts')
   const projectRuntimeEntries = allEntries.filter((entry) => entry.title === 'Project Runtime')
@@ -393,7 +393,7 @@ export function RepositoryPane({
     !isFolder &&
     !repo.connectionId &&
     (forceFullPaneForRepoMatch || matchesSettingsSearch(searchQuery, symlinkEntries)) ? (
-      <WorktreeSymlinksSection key="symlinks" repo={repo} updateRepo={updateSelectedRepo} />
+      <WorktreeCopySection key="symlinks" repo={repo} updateRepo={updateSelectedRepo} />
     ) : null,
     !isFolder &&
     (forceFullPaneForRepoMatch || matchesSettingsSearch(searchQuery, sparsePresetEntries)) ? (

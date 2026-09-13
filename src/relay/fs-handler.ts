@@ -105,7 +105,7 @@ export class FsHandler {
     this.dispatcher.onRequest('fs.getCapabilities', async () => ({
       quickOpenSearchVersion: 1,
       rangedReadVersion: 1,
-      worktreeMaterializationVersion: 1
+      worktreeMaterializationVersion: 2
     }))
     this.dispatcher.onRequest('fs.listFiles', (p, c) => this.listFiles(p, c))
     this.dispatcher.onRequest('fs.workspaceSpaceScan', (p, c) => this.workspaceSpaceScan(p, c))

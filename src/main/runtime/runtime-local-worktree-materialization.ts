@@ -131,7 +131,9 @@ export async function materializeRuntimeLocalWorktree<T>(args: {
       localWorktreeGitOptions.wslDistro,
       repo.path,
       created.path,
-      repo.symlinkPaths ?? []
+      repo.symlinkPaths ?? [],
+      undefined,
+      repo.worktreeCopyPaths ?? []
     )
     return { worktree, metadataResult, ...(includeCopyWarning ? { includeCopyWarning } : {}) }
   }
@@ -139,7 +141,9 @@ export async function materializeRuntimeLocalWorktree<T>(args: {
   const includeCopyWarning = await materializeHostWorktreePaths(
     repo.path,
     created.path,
-    repo.symlinkPaths ?? []
+    repo.symlinkPaths ?? [],
+    undefined,
+    repo.worktreeCopyPaths ?? []
   )
   return { worktree, metadataResult, ...(includeCopyWarning ? { includeCopyWarning } : {}) }
 }

@@ -5,14 +5,21 @@ export async function requestSshWorktreeMaterialization(
   mux: SshChannelMultiplexer,
   source: string,
   target: string,
-  linkedPaths: readonly string[]
+  linkedPaths: readonly string[],
+  copyPaths?: readonly string[]
 ) {
   if (!(await probeSshWorktreeMaterializationCapability(mux))) {
     return { supported: false }
   }
+  const supportsCopies =
+    copyPaths !== undefined && (await probeSshWorktreeMaterializationCapability(mux, 2))
+  const unsupportedWarning =
+    copyPaths?.length && !supportsCopies
+      ? `This host needs an update to copy repository Settings paths: ${copyPaths.join(', ')}. No shared links were substituted.`
+      : undefined
   const result = await mux.request(
     'fs.materializeWorktreePaths',
-    { source, target, linkedPaths },
+    { source, target, linkedPaths, ...(supportsCopies ? { copyPaths } : {}) },
     { timeoutMs: 300_000 }
   )
   if (
@@ -24,10 +31,8 @@ export async function requestSshWorktreeMaterialization(
   ) {
     throw new Error('Invalid host materialization response')
   }
-  return {
-    supported: result.supported,
-    ...('warning' in result && typeof result.warning === 'string'
-      ? { warning: result.warning }
-      : {})
-  }
+  const warning = [unsupportedWarning, 'warning' in result ? result.warning : undefined]
+    .filter(Boolean)
+    .join(' ')
+  return { supported: result.supported, ...(warning ? { warning } : {}) }
 }

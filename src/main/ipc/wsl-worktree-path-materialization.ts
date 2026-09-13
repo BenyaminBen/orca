@@ -35,6 +35,7 @@ export function buildWslWorktreeMaterializationScript(
     source: string
     target: string
     linkedPaths: readonly string[]
+    copyPaths?: readonly string[]
     operation?: 'inspect-links' | 'remove-links'
   }
 ): string {
@@ -54,7 +55,8 @@ async function requestWslWorktreePaths(
   target: string,
   linkedPaths: readonly string[],
   deps = { readBundle: readWslWorktreeMaterializationBundle, run: runWslProcess },
-  operation?: 'inspect-links' | 'remove-links'
+  operation?: 'inspect-links' | 'remove-links',
+  copyPaths?: readonly string[]
 ): Promise<{ warning?: string; paths?: string[] }> {
   const bundle = await deps.readBundle()
   const result = await deps.run({
@@ -64,6 +66,7 @@ async function requestWslWorktreePaths(
       source: toLinuxPath(source),
       target: toLinuxPath(target),
       linkedPaths,
+      ...(copyPaths !== undefined ? { copyPaths } : {}),
       ...(operation ? { operation } : {})
     }),
     timeoutMs: 300_000,
@@ -101,9 +104,12 @@ export async function materializeWslWorktreePaths(
   source: string,
   target: string,
   linkedPaths: readonly string[],
-  deps = { readBundle: readWslWorktreeMaterializationBundle, run: runWslProcess }
+  deps = { readBundle: readWslWorktreeMaterializationBundle, run: runWslProcess },
+  copyPaths?: readonly string[]
 ): Promise<string | undefined> {
-  return (await requestWslWorktreePaths(distro, source, target, linkedPaths, deps)).warning
+  return (
+    await requestWslWorktreePaths(distro, source, target, linkedPaths, deps, undefined, copyPaths)
+  ).warning
 }
 
 export async function inspectWslWorktreeSharedLinks(

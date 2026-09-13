@@ -1,3 +1,4 @@
+import { WORKTREE_COPY_PATHS_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
 import type { Repo } from '../../../../shared/repo-types'
@@ -8,7 +9,11 @@ import {
   getRepoHostIdentityForParts,
   repoMatchesHostIdentity
 } from '../slices/repo-host-identity'
-import { callRuntimeRpc, getActiveRuntimeTarget } from '../../runtime/runtime-rpc-client'
+import {
+  callRuntimeRpc,
+  getActiveRuntimeTarget,
+  assertRuntimeEnvironmentCapability
+} from '../../runtime/runtime-rpc-client'
 import { getRepoExecutionHostId } from '../../../../shared/execution-host'
 import {
   normalizeCustomWorktreeVisibilitySources,
@@ -115,6 +120,13 @@ export function createRepoUpdateActions(
         try {
           const sanitizedUpdates = sanitizeRepoUpdate(updates)
           const target = ownerTarget
+          if (target.kind === 'environment' && 'worktreeCopyPaths' in sanitizedUpdates) {
+            await assertRuntimeEnvironmentCapability(
+              target.environmentId,
+              WORKTREE_COPY_PATHS_RUNTIME_CAPABILITY,
+              'Repository copy settings require a newer Orca server. Update the host before changing or converting paths.'
+            )
+          }
           const updatedRepo =
             target.kind === 'local'
               ? await window.api.repos.update({
