@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import type { AiVaultSession } from '../../../../shared/ai-vault-types'
 import type { AiVaultSessionWorktreeInfo } from './ai-vault-session-worktree'
+import { searchHit } from '../../../../shared/ai-vault-search-test-fixture'
+import type { AiVaultSearchHit } from '../../../../shared/ai-vault-search-types'
 import { VaultSessionRow } from './AiVaultSessionRow'
 
 const session = {
@@ -58,6 +60,7 @@ afterEach(() => {
 
 function renderRow(
   overrides: {
+    searchHit?: AiVaultSearchHit
     detailsExpanded?: boolean
     worktreeInfo?: AiVaultSessionWorktreeInfo | null
     onToggleDetails?: () => void
@@ -68,6 +71,7 @@ function renderRow(
     <TooltipProvider>
       <VaultSessionRow
         session={session}
+        searchHit={overrides.searchHit}
         liveState={null}
         resumeStartup={{ command: 'gemini --resume sess-1' }}
         realHomeResumeStartup={{ command: 'gemini --resume sess-1' }}
@@ -158,4 +162,9 @@ describe('VaultSessionRow agent metadata line', () => {
 
     expect(container.querySelectorAll(`[title="${worktreeInfo.label}"]`)).toHaveLength(1)
   })
+})
+
+it('keeps matching evidence visible in expanded search rows', () => {
+  const { container } = renderRow({ detailsExpanded: true, searchHit: searchHit() })
+  expect(container.querySelector('mark')?.textContent).toBe('needle')
 })
