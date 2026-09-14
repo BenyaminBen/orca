@@ -53,6 +53,7 @@ import { LinkActionPopover } from '@/components/link-actions/LinkActionPopover'
 import { useNativeChatLinkActions } from './use-native-chat-link-actions'
 import type { NativeChatResolvedViewProps } from './native-chat-view-types'
 import { useNativeChatFileLinkContext } from './use-native-chat-file-link-context'
+import { useNativeChatImageRuntimeContext } from './native-chat-image-runtime-context'
 import { matchNativeChatSplitShortcut } from './native-chat-split-shortcut'
 import { getShortcutPlatform } from '@/lib/shortcut-platform'
 import { formatShortcutLabel } from '@/hooks/useShortcutLabel'
@@ -128,6 +129,7 @@ export function NativeChatResolvedView({
   // replaces the composer.
   const questionAnswerInputRef = useRef<HTMLInputElement>(null)
   const fileLinkContext = useNativeChatFileLinkContext(terminalTabId)
+  const imageRuntimeContext = useNativeChatImageRuntimeContext(terminalTabId)
   const pasteClipboardIntoComposer = useNativeChatPasteBridge({
     rootRef,
     composerRef,
@@ -407,6 +409,8 @@ export function NativeChatResolvedView({
             showTurnStatus={false}
             onLinkClick={onLinkClick}
             allowFileUriLinks={fileLinkContext !== null}
+            runtimeContext={imageRuntimeContext}
+            isVisible={isVisible}
             failedDeliveryMessageIds={failedLaunchPromptMessageIds}
           />
         )}

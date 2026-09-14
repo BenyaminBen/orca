@@ -7,6 +7,22 @@ import {
 import { resolveAgentLaunchCommand } from './tui-agent-launch-command'
 
 describe('tui agent startup session options', () => {
+  it('keeps conversation permissions ahead of inherited Yolo arguments on terminal handoff', () => {
+    const plan = buildAgentStartupPlan({
+      agent: 'codex',
+      prompt: '',
+      cmdOverrides: {},
+      platform: 'linux',
+      allowEmptyPromptLaunch: true,
+      sessionOptions: { permissions: 'ask-for-approval' },
+      sessionOptionsOverrideAgentArgs: true,
+      agentArgs: '--yolo -c model_reasoning_effort=high'
+    })
+    expect(plan?.launchCommand).not.toContain('--yolo')
+    expect(plan?.launchCommand).toContain('approval_policy="on-request"')
+    expect(plan?.launchCommand).toContain('sandbox_mode="workspace-write"')
+    expect(plan?.launchCommand).toContain('model_reasoning_effort=high')
+  })
   it('emits catalog options before user arguments without recording an overridden model', () => {
     const plan = buildAgentStartupPlan({
       agent: 'claude',

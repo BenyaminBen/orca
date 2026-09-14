@@ -31,7 +31,11 @@ describe('structured agent session options', () => {
     )
 
     const structured = structuredAgentSessionOptionSnapshot(state)
-    expect(structured.map((descriptor) => descriptor.id)).toEqual(['model', 'effort'])
+    expect(structured.map((descriptor) => descriptor.id)).toEqual([
+      'model',
+      'effort',
+      'permissions'
+    ])
     expect(structured[0]).toMatchObject({
       settable: true,
       kind: { type: 'select', currentValue: 'account-model' }
@@ -106,9 +110,17 @@ describe('structured agent session options', () => {
     )
 
     const snapshot = structuredAgentSessionOptionSnapshot(state)
-    expect(snapshot.map((descriptor) => descriptor.id)).toEqual(['model', 'effort'])
-    expect(snapshot.every((descriptor) => descriptor.settable)).toBe(true)
+    expect(snapshot.map((descriptor) => descriptor.id)).toEqual(['model', 'effort', 'permissions'])
+    expect(
+      snapshot
+        .filter((descriptor) => descriptor.id !== 'permissions')
+        .every((descriptor) => descriptor.settable)
+    ).toBe(true)
     expect(snapshot.every((descriptor) => descriptor.action === undefined)).toBe(true)
+    expect(snapshot.find(({ id }) => id === 'permissions')).toMatchObject({
+      settable: false,
+      valueSource: 'unknown'
+    })
   })
 
   it('projects Fast mode only from positive session and model capability', () => {
@@ -150,7 +162,10 @@ describe('structured agent session options', () => {
       ],
       current: { model: 'account-model' }
     })
-    expect(structuredAgentSessionOptionSnapshot(absent).map(({ id }) => id)).toEqual(['model'])
+    expect(structuredAgentSessionOptionSnapshot(absent).map(({ id }) => id)).toEqual([
+      'model',
+      'permissions'
+    ])
     expect(absent.record.valuesByModel['account-model']?.fastMode).toBeUndefined()
   })
 

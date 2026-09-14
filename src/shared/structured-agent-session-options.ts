@@ -17,6 +17,12 @@ import {
 import { STRUCTURED_LAUNCH_SEED_OPTION_IDS } from './native-chat-session-option-defaults'
 import type { SessionOptionDescriptor, SessionOptionValue } from './native-chat-session-options'
 import type { AgentSessionOptionsResult } from './agent-session-wire'
+import { nativeChatPermissionOption } from './native-chat-permission-option'
+import {
+  isCodexPermissionMode,
+  unavailableCodexPermissionOptions,
+  type CodexPermissionOptions
+} from './codex-permissions'
 import {
   decodeStructuredAgentSessionOptionValue,
   encodeStructuredAgentSessionOptionValue
@@ -84,6 +90,7 @@ export function structuredAgentSessionOptionCatalog(
 }
 
 export type StructuredAgentSessionOptionState = {
+  permissions?: CodexPermissionOptions
   catalog: AgentSessionOptionCatalog | null
   record: NativeChatSessionOptionRecord
   pendingId: string | null
@@ -92,7 +99,18 @@ export type StructuredAgentSessionOptionState = {
 export function createStructuredAgentSessionOptionState(
   agent = 'codex'
 ): StructuredAgentSessionOptionState {
-  return { catalog: null, record: createNativeChatSessionOptionRecord(agent), pendingId: null }
+  return {
+    catalog: null,
+    record: createNativeChatSessionOptionRecord(agent),
+    pendingId: null,
+    ...(agent === 'codex'
+      ? {
+          permissions: unavailableCodexPermissionOptions(
+            'Waiting for the host to report permission modes.'
+          )
+        }
+      : {})
+  }
 }
 
 export function applyStructuredAgentSessionOptions(
@@ -112,23 +130,36 @@ export function applyStructuredAgentSessionOptions(
     },
     result.current.confirmed ?? []
   )
-  return { ...state, catalog: structuredAgentSessionOptionCatalog(seed, result) }
+  return {
+    ...state,
+    permissions:
+      result.permissions ??
+      (state.record.agent === 'codex'
+        ? unavailableCodexPermissionOptions(
+            'This host does not report permission modes. Update the host to use this selector.'
+          )
+        : undefined),
+    catalog: structuredAgentSessionOptionCatalog(seed, result)
+  }
 }
 
 export function structuredAgentSessionOptionSnapshot(
   state: StructuredAgentSessionOptionState
 ): SessionOptionDescriptor[] {
   if (!state.catalog) {
-    return []
+    return state.permissions ? [nativeChatPermissionOption(state.permissions, 'agent-session')] : []
   }
-  return buildNativeChatSessionOptionSnapshot({
-    catalog: state.catalog,
-    models: state.catalog.models,
-    record: state.record,
-    mode: 'live',
-    modelLabel: 'Model',
-    liveTransport: 'agent-session'
-  })
+  return [
+    ...buildNativeChatSessionOptionSnapshot({
+      catalog: state.catalog,
+      models: state.catalog.models,
+      record: state.record,
+      mode: 'live',
+      modelLabel: 'Model',
+      liveTransport: 'agent-session'
+    }),
+    ...(state.permissions ? [nativeChatPermissionOption(state.permissions, 'agent-session')] : [])
+  ]
 }
 
 export function canSetStructuredAgentSessionOption(
@@ -142,7 +173,8 @@ export function canSetStructuredAgentSessionOption(
     state.pendingId === null &&
     ((typeof value === 'string' &&
       descriptor?.kind.type === 'select' &&
-      descriptor.kind.choices.some((choice) => choice.value === value)) ||
+      descriptor.settable &&
+      descriptor.kind.choices.some((choice) => choice.value === value && !choice.disabledReason)) ||
       (typeof value === 'boolean' && descriptor?.kind.type === 'boolean'))
   )
 }
@@ -172,7 +204,10 @@ export function commitStructuredAgentSessionOptionValues(
   state: StructuredAgentSessionOptionState,
   values: Readonly<Record<string, string>>
 ): StructuredAgentSessionOptionState {
-  let next = state
+  let next =
+    state.permissions && isCodexPermissionMode(values.permissions)
+      ? { ...state, permissions: { ...state.permissions, pending: values.permissions } }
+      : state
   for (const id of STRUCTURED_LAUNCH_SEED_OPTION_IDS) {
     const value = values[id]
     if (value !== undefined) {

@@ -231,6 +231,7 @@ export function NativeChatStructuredSession(
             onLinkClick={onLinkClick}
             allowFileUriLinks={onLinkClick !== undefined}
             runtimeContext={imageRuntimeContext}
+            isVisible={props.isVisible}
           />
         )}
       </div>

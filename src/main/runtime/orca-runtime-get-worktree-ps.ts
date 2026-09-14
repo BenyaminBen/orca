@@ -220,6 +220,32 @@ export class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithStructuredAgent
   protected createStructuredAgentSessionHandoffTransport(): StructuredAgentSessionHandoffTransport {
     return {
       hostLabel: hostname(),
+      readTuiPermissions: async (owner, { exited }) => {
+        const { readCodexPermissionScreen, runCodexPermissionMenu } =
+          await import('../../shared/codex-permission-menu')
+        const { isCodexPermissionMode, codexPermissionPolicy } =
+          await import('../../shared/codex-permissions')
+        const readScreen = async () => {
+          const snapshot = await this.readTerminal(owner.terminal.handle, { screen: true })
+          if (snapshot.source !== 'screen' || snapshot.draft) {
+            return null
+          }
+          return snapshot.tail.join('\n')
+        }
+        const permissions = exited
+          ? readCodexPermissionScreen((await readScreen()) ?? '')
+          : await runCodexPermissionMenu({
+              readScreen,
+              write: async (key) =>
+                (await this.sendTerminal(owner.terminal.handle, { text: key })).accepted
+            })
+        if (!isCodexPermissionMode(permissions.current)) {
+          throw new Error(
+            'This terminal has custom or unreported permissions. Select an official permission mode before switching to structured chat.'
+          )
+        }
+        return codexPermissionPolicy(permissions.current)
+      },
       launchTui: this.createStructuredAgentSessionLaunchTuiCallback(),
       waitForTuiExit: async (owner) => {
         await this.waitForStructuredTuiOwnerExit(owner)

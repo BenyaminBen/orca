@@ -151,7 +151,9 @@ export function sortNativeChatSessionOptions(
   snapshot: readonly SessionOptionDescriptor[]
 ): SessionOptionDescriptor[] {
   return snapshot
-    .filter((descriptor) => descriptor.category !== 'model')
+    .filter(
+      (descriptor) => descriptor.category !== 'model' && descriptor.category !== 'permissions'
+    )
     .sort((left, right) => {
       const leftOrder = CATEGORY_ORDER[left.category ?? ''] ?? 3
       const rightOrder = CATEGORY_ORDER[right.category ?? ''] ?? 3

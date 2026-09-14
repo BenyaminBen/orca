@@ -1,6 +1,11 @@
 import type { AgentType } from './agent-status-types'
 import { findCatalogModel, getAgentSessionOptionCatalog } from './agent-session-option-catalog'
 import type { SessionOptionValue } from './native-chat-session-options'
+import {
+  codexPermissionLaunchArgs,
+  permissionPolicyFromOptions,
+  removeCodexPermissionArgs
+} from './codex-permission-launch'
 
 export type ResolvedSessionOptionLaunch = {
   args: string[]
@@ -12,6 +17,9 @@ export function removeOverriddenAgentSessionArgs(
   values: Record<string, SessionOptionValue> | null | undefined,
   tokens: readonly string[]
 ): string[] {
+  if (agent === 'codex' && permissionPolicyFromOptions(values)) {
+    tokens = removeCodexPermissionArgs(tokens)
+  }
   const catalog = getAgentSessionOptionCatalog(agent)
   const modelId = typeof values?.model === 'string' ? values.model : null
   if (!catalog || !values || !modelId) {
@@ -34,15 +42,17 @@ export function resolveAgentSessionOptionLaunch(
   trailingAgentArgs: readonly string[] = [],
   includeCatalogDefaults = true
 ): ResolvedSessionOptionLaunch {
+  const permissions = agent === 'codex' ? permissionPolicyFromOptions(values) : undefined
+  const permissionArgs = permissions ? codexPermissionLaunchArgs(permissions) : []
   const catalog = getAgentSessionOptionCatalog(agent)
   const modelId = typeof values?.model === 'string' ? values.model : null
   if (!catalog || !values || !modelId) {
-    return { args: [], appliedValues: {} }
+    return { args: permissionArgs, appliedValues: {} }
   }
 
   const model = findCatalogModel(catalog, modelId)
   const appliedValues: Record<string, SessionOptionValue> = {}
-  const args: string[] = []
+  const args: string[] = [...permissionArgs]
   const modelOptions = model?.options ?? catalog.unknownModelOptions ?? []
   const modelValues = Object.fromEntries(
     modelOptions.flatMap((option) => {

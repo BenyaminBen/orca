@@ -6,6 +6,8 @@ import { AgentSessionOptionRejectedError } from '../native-chat/agent-session-wi
 import { decodeStructuredAgentSessionOptionValue } from '../../shared/structured-agent-session-option-codec'
 import { decodeCodexFastMode, reconcileCodexFastModeOption } from './codex-structured-fast-mode'
 import { readCodexStructuredSessionOptionCatalog } from './codex-structured-model-catalog'
+import { readCodexPermissionOptions, selectCodexPermissions } from './codex-structured-permissions'
+import { decodeCodexPermissionPolicy, isCodexPermissionMode } from '../../shared/codex-permissions'
 
 export function restoredCodexSessionOptions(
   options: Readonly<Record<string, string>> | undefined
@@ -13,7 +15,9 @@ export function restoredCodexSessionOptions(
   const restored = new Map(
     Object.entries(options ?? {}).filter(([key, value]) => {
       return (
-        isCodexTurnOptionKey(key) &&
+        (isCodexTurnOptionKey(key) ||
+          (key === 'permissionState' && !!decodeCodexPermissionPolicy(value))) &&
+        (key !== 'permissions' || isCodexPermissionMode(value)) &&
         (key !== 'fastMode' ||
           typeof decodeStructuredAgentSessionOptionValue('fastMode', value) === 'boolean')
       )
@@ -62,7 +66,7 @@ export function readLiveCodexSessionOptions(
         }
       : {}),
     timeoutMs
-  }).then((catalog) => {
+  }).then(async (catalog) => {
     reconcileCodexFastModeOption(session, {
       fastModeTierByModel: catalog.fastModeTierByModel,
       currentFastMode: catalog.result.current.fastMode,
@@ -72,9 +76,10 @@ export function readLiveCodexSessionOptions(
       )?.supportsFastMode
     })
     const fastMode = decodeCodexFastMode(session.options)
+    const permissions = await readCodexPermissionOptions(session, timeoutMs)
     return fastMode === undefined
-      ? catalog.result
-      : { ...catalog.result, current: { ...catalog.result.current, fastMode } }
+      ? { ...catalog.result, permissions }
+      : { ...catalog.result, permissions, current: { ...catalog.result.current, fastMode } }
   })
 }
 
@@ -97,6 +102,9 @@ async function applyValidatedCodexStructuredSessionOption(
   value: string,
   timeoutMs: number | undefined
 ): Promise<Readonly<Record<string, string>>> {
+  if (key === 'permissions') {
+    return selectCodexPermissions(session, value, timeoutMs)
+  }
   // `serviceTier` still restores, so a session persisted before Fast existed migrates,
   // but the turn now derives the tier from `fastMode`. Accepting a direct write would
   // report success for a value the next turn discards.

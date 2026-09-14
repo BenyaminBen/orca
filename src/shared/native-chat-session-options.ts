@@ -6,6 +6,7 @@ export type SessionOptionSelectChoice = {
   value: string
   label: string
   description?: string
+  disabledReason?: string
 }
 
 /** `default` is the catalog's own value shown before anything is observed —
@@ -32,7 +33,7 @@ export type SessionOptionDescriptor = {
   id: string
   label: string
   description?: string
-  category?: 'model' | 'thought_level' | 'model_config' | 'mode'
+  category?: 'model' | 'thought_level' | 'model_config' | 'mode' | 'permissions'
   kind:
     | {
         type: 'select'

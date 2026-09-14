@@ -21,6 +21,7 @@ import {
 } from './native-chat-session-option-discovery'
 import { readClaudeSessionOptionsFromTerminalScreen } from './claude-terminal-session-options'
 import { enqueueSessionOptionSettingsWrite } from './native-chat-session-option-settings-write'
+import { useNativeChatPermissions } from './use-native-chat-permissions'
 
 const EMPTY_SNAPSHOT: SessionOptionDescriptor[] = []
 const subscribeEmpty = (): (() => void) => () => {}
@@ -58,6 +59,7 @@ export function useNativeChatSessionOptions(args: {
   dispatchCommand: NativeChatSessionOptionDispatchCommand
   onAgentPicker?: () => void
   readTerminalScreen?: () => string | null
+  permissionsDisabled?: boolean
 }): {
   surface: NativeChatPtySessionOptionsSurface | null
   snapshot: SessionOptionDescriptor[]
@@ -117,6 +119,14 @@ export function useNativeChatSessionOptions(args: {
     targetPtyId,
     terminalTabId
   ])
+
+  useNativeChatPermissions({
+    enabled: agent === 'codex',
+    disabled: args.permissionsDisabled === true,
+    surface,
+    readTerminalScreen,
+    dispatchCommand
+  })
 
   useEffect(() => {
     if (!surface || agent !== 'claude') {

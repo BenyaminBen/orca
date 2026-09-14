@@ -7,6 +7,7 @@ import type {
   SessionOptionsSurface
 } from '../../../../shared/native-chat-session-options'
 import { NativeChatSessionOptionPickers } from './NativeChatSessionOptionPickers'
+import { NativeChatPermissionPicker } from './NativeChatPermissionPicker'
 import type { NativeChatOptionPickerRequest } from './native-chat-composer-types'
 
 export type NativeChatComposerActionsProps = {
@@ -44,6 +45,9 @@ export function NativeChatComposerActions({
   sessionOptionsSnapshot,
   sessionOptionsPickerRequest
 }: NativeChatComposerActionsProps): React.JSX.Element {
+  const permissionOption = sessionOptionsSnapshot.find(
+    (option) => option.category === 'permissions'
+  )
   const handleCriticalAction = (event: React.MouseEvent<HTMLButtonElement>): void => {
     // A double-click commonly lands after the first send has started and the button has
     // changed to Stop; ignore the second click instead of cancelling the new turn.
@@ -80,6 +84,13 @@ export function NativeChatComposerActions({
             {translate('components.native-chat.composer.attach', 'Attach file')}
           </TooltipContent>
         </Tooltip>
+        {sessionOptionsSurface && permissionOption ? (
+          <NativeChatPermissionPicker
+            surface={sessionOptionsSurface}
+            descriptor={permissionOption}
+            isWorking={isWorking}
+          />
+        ) : null}
       </div>
       <div className="ml-auto flex items-center gap-1.5">
         {/* Why: keep session controls beside the actions they affect; the

@@ -6,7 +6,6 @@ export function conversationCommandBlocked(
   ctx: AgentSessionTurnContext,
   record: AgentSessionRecord
 ): string | null {
-  const items = ctx.journal.snapshot().items
   if (record.rewind?.phase === 'prepared' || record.rewind?.phase === 'provider-succeeded') {
     return 'agent_session_rewind:outcome-unknown'
   }
@@ -26,6 +25,11 @@ export function conversationCommandBlocked(
   if (record.lease.handoffStage || record.lease.handoffOperationId) {
     return 'Wait for the session handoff to finish.'
   }
+  return conversationActivityBlocked(ctx)
+}
+
+export function conversationActivityBlocked(ctx: AgentSessionTurnContext): string | null {
+  const items = ctx.journal.snapshot().items
   if (activeStructuredAgentSessionTurnId(items)) {
     return 'Wait for the current turn to finish before using this command.'
   }

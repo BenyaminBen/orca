@@ -15,6 +15,7 @@ import { openCodexAppServerConnection } from './codex-app-server-connection'
 import { codexProcessIdentity, codexProviderHandleLink } from './codex-structured-owner-identity'
 import { buildCodexStructuredChildEnvironment } from './codex-structured-child-environment'
 import { openCodexThread } from './codex-structured-thread-open'
+import { permissionPolicyFromOptions } from '../../shared/codex-permission-launch'
 import {
   closeCodexPublishedSession,
   handleCodexSessionExit
@@ -171,7 +172,14 @@ export async function acquireCodexStructuredSession(input: {
       })
     }
     acquisitions.assertCurrent(sessionId, attempt)
-    const opened = await openCodexThread(connection, launch, deps.requestTimeoutMs)
+    const opened = await openCodexThread(
+      connection,
+      {
+        ...launch,
+        permissions: permissionPolicyFromOptions(acquireInput.options)
+      },
+      deps.requestTimeoutMs
+    )
     acquisitions.assertCurrent(sessionId, attempt)
     primaryThreadId = opened.threadId
     const restoreAdmission = translator?.restoreThread(opened.threadId, opened.thread ?? {})
@@ -201,6 +209,10 @@ export async function acquireCodexStructuredSession(input: {
     }
     acquisitions.assertCurrent(sessionId, attempt)
     const options = restoredCodexSessionOptions(acquireInput.options)
+    if (opened.permissions) {
+      options.set('permissionState', JSON.stringify(opened.permissions))
+      options.delete('permissions')
+    }
     const fastModeCatalog =
       options.get('fastMode') === 'true' || options.has('serviceTier')
         ? await readCodexStructuredSessionOptionCatalog({

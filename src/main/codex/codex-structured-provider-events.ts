@@ -5,6 +5,7 @@ import * as codexRewind from './codex-structured-rewind'
 import type { CodexSession, CodexStructuredSessionEvent } from './codex-structured-session-state'
 import { readCodexThreadId, readCodexTurnId } from './codex-structured-thread-facts'
 import type { CodexStructuredTurnCancellation } from './codex-structured-turn-cancellation'
+import { observeCodexPermissions } from './codex-structured-permissions'
 
 type EmitCodexEvent = (
   session: CodexSession,
@@ -52,6 +53,9 @@ export function deliverCodexNotification(
     params,
     ...(observedAt !== undefined ? { observedAt } : {})
   })
+  if (admission.accepted && method === 'thread/settings/updated') {
+    observeCodexPermissions(session, params)
+  }
   if (method === 'turn/started' && threadId === session.threadId) {
     if (admission.accepted && turnId && session.turnIdWaiters[0] === turnWaiter) {
       session.turnIdWaiters.shift()

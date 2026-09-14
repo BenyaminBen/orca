@@ -1,3 +1,4 @@
+import type { CodexPermissionPolicy } from '../../shared/codex-permissions'
 import type { AgentSessionJournalIdentity } from '../../shared/agent-session-journal-types'
 import { randomUUID } from 'node:crypto'
 import { cancelProcessAcquisition } from '../../shared/child-process/cancel-process-acquisition'
@@ -87,6 +88,7 @@ export type CodexSession = {
   prompts: CodexAcquisitionWindow['prompts']
   options: Map<string, string>
   reportedOptions: {
+    permissions?: CodexPermissionPolicy
     model?: string
     effort?: string
     serviceTier?: string | null

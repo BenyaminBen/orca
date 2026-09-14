@@ -145,6 +145,13 @@ export function useStructuredAgentSession(args: {
       const currentState = optionStateRef.current
       const encoded = encodeStructuredAgentSessionOptionValue(id, value)
       if (
+        (id === 'permissions' &&
+          (activeStructuredAgentSessionTurnId(stateRef.current.items) !== null ||
+            hasUnansweredStructuredAgentSessionDispatch(
+              stateRef.current.submissions,
+              stateRef.current.fence
+            ) ||
+            pendingStructuredSessionPrompts(stateRef.current.items).length > 0)) ||
         pendingOptionRef.current !== null ||
         !optionCatalog ||
         encoded === null ||
@@ -173,7 +180,8 @@ export function useStructuredAgentSession(args: {
               ? commitStructuredAgentSessionOptionValues(current, committed)
               : current
           )
-          const picks = structuredAgentSessionOptionPicks(currentState, committed)
+          const picks =
+            id === 'permissions' ? [] : structuredAgentSessionOptionPicks(currentState, committed)
           if (picks.length > 0) {
             void enqueueSessionOptionSettingsWrite(target, {
               type: 'apply-picks',
@@ -219,7 +227,9 @@ export function useStructuredAgentSession(args: {
   )
   const setOption = useCallback(
     async (id: string, value: string | boolean) => {
-      await setStructuredOption(id, value)
+      if (!(await setStructuredOption(id, value))) {
+        throw new Error('The chat could not accept this option change. Try again when it is idle.')
+      }
       return { snapshot: structuredAgentSessionOptionSnapshot(optionStateRef.current) }
     },
     [setStructuredOption]
@@ -263,7 +273,9 @@ export function useStructuredAgentSession(args: {
     outbox,
     blockedClientMessageId: outboxController.blockedClientMessageId,
     send: (...input: Parameters<typeof outboxController.send>) =>
-      !commandPending.current && outboxController.send(...input),
+      !commandPending.current &&
+      pendingOptionRef.current === null &&
+      outboxController.send(...input),
     retry: outboxController.retry,
     isWorking,
     workingStartedAt: turnTiming.workingStartedAt,

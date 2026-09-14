@@ -26,6 +26,7 @@ import {
 } from './native-chat-transcript-slots'
 import { useNativeChatTranscriptWindow } from './use-native-chat-transcript-window'
 import { useNativeChatTranscriptScroll } from './use-native-chat-transcript-scroll'
+import { NativeChatImageScopeContext } from './native-chat-image-scope'
 
 import type { AgentJournalRenderItem } from '../../../../shared/agent-session-journal-types'
 import { isStructuredAgentSessionThinking } from '../../../../shared/structured-agent-session-live-turn'
@@ -54,7 +55,8 @@ export function NativeChatMessageList({
   failedDeliveryMessageIds,
   showTurnStatus = true,
   turnActivity,
-  runtimeContext
+  runtimeContext,
+  isVisible = true
 }: {
   session: NativeChatLiveSession
   journalItems?: readonly AgentJournalRenderItem[]
@@ -73,6 +75,7 @@ export function NativeChatMessageList({
   showTurnStatus?: boolean
   turnActivity?: NativeChatTurnActivity | null
   runtimeContext?: RuntimeFileOperationArgs | null
+  isVisible?: boolean
 }): React.JSX.Element {
   const [revealedDiff, setRevealedDiff] = useState<NativeChatDiffReveal | null>(null)
   const revealDiff = useCallback((target: NativeChatDiffTarget) => {
@@ -241,84 +244,89 @@ export function NativeChatMessageList({
   )
 
   return (
-    <NativeChatDisclosureContext.Provider value={disclosures}>
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        <div className="relative min-h-0 flex-1">
-          <div
-            ref={scrollRef}
-            onScroll={onScroll}
-            // Named so measurement can find the scroll root without depending on
-            // which utility class happens to make it scroll.
-            data-native-chat-scroll
-            className="scrollbar-sleek relative h-full overflow-y-auto [scrollbar-gutter:stable_both-edges]"
-            // Why: `zoom` scales the chat transcript's text and layout together,
-            // scoped to this pane so the rest of the app is untouched. It sits on
-            // the scroll container rather than the content inside it so that
-            // scroll offsets and row measurements share one coordinate space —
-            // measuring zoomed content against an unzoomed scroller misplaces the
-            // window by exactly `fontScale`. (Chromium/Electron only.)
-            style={{ zoom: fontScale }}
-          >
-            <div className="px-3 pt-10 pb-4 sm:px-4">
-              <div
-                ref={contentRef}
-                // Why: matches composer column (max-w-4xl) with 5px horizontal inset
-                // on each side so content is slightly narrower than the input box.
-                className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-[5px]"
-              >
-                {hasMore ? (
-                  <div className="flex justify-center py-1">
-                    <button
-                      type="button"
-                      onClick={loadEarlier}
-                      disabled={loadingEarlier}
-                      className="rounded-md px-3 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
-                    >
-                      {loadingEarlier
-                        ? translate('components.native-chat.loadingEarlier', 'Loading…')
-                        : translate('components.native-chat.loadEarlier', 'Load earlier messages')}
-                    </button>
-                  </div>
-                ) : null}
-                <NativeChatTranscriptItems
-                  slots={slots}
-                  context={rowContext}
-                  window={transcriptWindow}
-                />
-                {showTurnStatus && isWorking ? (
-                  <NativeChatTurnActivityLine
-                    activity={turnActivity}
-                    status={turnStatuses.active}
+    <NativeChatImageScopeContext.Provider value={isVisible ? session.sessionId : null}>
+      <NativeChatDisclosureContext.Provider value={disclosures}>
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <div className="relative min-h-0 flex-1">
+            <div
+              ref={scrollRef}
+              onScroll={onScroll}
+              // Named so measurement can find the scroll root without depending on
+              // which utility class happens to make it scroll.
+              data-native-chat-scroll
+              className="scrollbar-sleek relative h-full overflow-y-auto [scrollbar-gutter:stable_both-edges]"
+              // Why: `zoom` scales the chat transcript's text and layout together,
+              // scoped to this pane so the rest of the app is untouched. It sits on
+              // the scroll container rather than the content inside it so that
+              // scroll offsets and row measurements share one coordinate space —
+              // measuring zoomed content against an unzoomed scroller misplaces the
+              // window by exactly `fontScale`. (Chromium/Electron only.)
+              style={{ zoom: fontScale }}
+            >
+              <div className="px-3 pt-10 pb-4 sm:px-4">
+                <div
+                  ref={contentRef}
+                  // Why: matches composer column (max-w-4xl) with 5px horizontal inset
+                  // on each side so content is slightly narrower than the input box.
+                  className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-[5px]"
+                >
+                  {hasMore ? (
+                    <div className="flex justify-center py-1">
+                      <button
+                        type="button"
+                        onClick={loadEarlier}
+                        disabled={loadingEarlier}
+                        className="rounded-md px-3 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+                      >
+                        {loadingEarlier
+                          ? translate('components.native-chat.loadingEarlier', 'Loading…')
+                          : translate(
+                              'components.native-chat.loadEarlier',
+                              'Load earlier messages'
+                            )}
+                      </button>
+                    </div>
+                  ) : null}
+                  <NativeChatTranscriptItems
+                    slots={slots}
+                    context={rowContext}
+                    window={transcriptWindow}
                   />
-                ) : null}
-                {!showTurnStatus && showTypingIndicator ? <NativeChatTypingIndicatorRow /> : null}
+                  {showTurnStatus && isWorking ? (
+                    <NativeChatTurnActivityLine
+                      activity={turnActivity}
+                      status={turnStatuses.active}
+                    />
+                  ) : null}
+                  {!showTurnStatus && showTypingIndicator ? <NativeChatTypingIndicatorRow /> : null}
+                </div>
               </div>
             </div>
+            {showJump ? (
+              <button
+                type="button"
+                onClick={scrollToBottom}
+                aria-label={translate('components.native-chat.jumpToLatest', 'Jump to latest')}
+                className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-border bg-card/90 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <ArrowDown className="size-3.5" />
+                <span>{translate('components.native-chat.jumpToLatest', 'Jump to latest')}</span>
+              </button>
+            ) : null}
           </div>
-          {showJump ? (
-            <button
-              type="button"
-              onClick={scrollToBottom}
-              aria-label={translate('components.native-chat.jumpToLatest', 'Jump to latest')}
-              className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-border bg-card/90 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <ArrowDown className="size-3.5" />
-              <span>{translate('components.native-chat.jumpToLatest', 'Jump to latest')}</span>
-            </button>
+          {taskListState.list && taskListState.list.tasks.length > 0 ? (
+            <div className="shrink-0 px-3 pb-2 sm:px-4">
+              <div className="mx-auto w-full max-w-4xl" style={{ zoom: fontScale }}>
+                <NativeChatTaskList
+                  key={session.sessionId}
+                  list={taskListState.list}
+                  presentation="composer"
+                />
+              </div>
+            </div>
           ) : null}
         </div>
-        {taskListState.list && taskListState.list.tasks.length > 0 ? (
-          <div className="shrink-0 px-3 pb-2 sm:px-4">
-            <div className="mx-auto w-full max-w-4xl" style={{ zoom: fontScale }}>
-              <NativeChatTaskList
-                key={session.sessionId}
-                list={taskListState.list}
-                presentation="composer"
-              />
-            </div>
-          </div>
-        ) : null}
-      </div>
-    </NativeChatDisclosureContext.Provider>
+      </NativeChatDisclosureContext.Provider>
+    </NativeChatImageScopeContext.Provider>
   )
 }

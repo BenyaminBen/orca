@@ -13,6 +13,11 @@ import {
   type ClaudeModelSwitchConfirmationObserver
 } from './claude-model-switch-confirmation'
 import type { NativeChatSessionOptionDispatchCommand } from './native-chat-session-option-command-dispatch'
+import {
+  clearCodexConversationKeepingPermissions,
+  runCodexPermissionMenu
+} from '../../../../shared/codex-permission-menu'
+import { sendRuntimePtyInputVerified } from '@/runtime/runtime-terminal-inspection'
 
 export function useNativeChatSessionOptionCommand(args: {
   agent: AgentType
@@ -20,8 +25,9 @@ export function useNativeChatSessionOptionCommand(args: {
   onSlashCommand?: (command: string) => void
   resolveTarget: () => NativeChatResolvedTarget | null
   setHistory: Dispatch<SetStateAction<HistoryState>>
+  readTerminalScreen?: () => string | null
 }): { dispatch: NativeChatSessionOptionDispatchCommand; isDispatching: boolean } {
-  const { agent, disabled, onSlashCommand, resolveTarget, setHistory } = args
+  const { agent, disabled, onSlashCommand, resolveTarget, setHistory, readTerminalScreen } = args
   const mountedRef = useRef(true)
   const activeObserversRef = useRef(new Set<ClaudeModelSwitchConfirmationObserver>())
   const activeSendsRef = useRef(new Set<AbortController>())
@@ -51,7 +57,7 @@ export function useNativeChatSessionOptionCommand(args: {
   const dispatch = useCallback(
     async (command, options) => {
       const target = resolveTarget()
-      if (!target || disabled) {
+      if (!target || disabled || activeSendsRef.current.size > 0) {
         throw new Error('No live terminal is available.')
       }
       const sendController = new AbortController()
@@ -68,6 +74,21 @@ export function useNativeChatSessionOptionCommand(args: {
         await waitForNativeChatPtyIdle(target.ptyId)
         if (!mountedRef.current || sendController.signal.aborted) {
           throw new Error('Chat UI command was canceled because the composer closed.')
+        }
+        if (agent === 'codex' && options?.permissions) {
+          const run =
+            options.permissions === 'preserve-on-clear'
+              ? clearCodexConversationKeepingPermissions
+              : runCodexPermissionMenu
+          const permissions = await run({
+            readScreen: () => readTerminalScreen?.() ?? null,
+            write: (key) => sendRuntimePtyInputVerified(target.settings, target.ptyId, key),
+            ...(options.permissions === 'read' || options.permissions === 'preserve-on-clear'
+              ? {}
+              : { mode: options.permissions }),
+            signal: sendController.signal
+          })
+          return { permissions, outcome: 'applied' as const }
         }
         const detectClaudeConfirmation =
           options?.detectAgentInteraction === 'claude-model-switch-confirmation'
@@ -124,7 +145,7 @@ export function useNativeChatSessionOptionCommand(args: {
         }
       }
     },
-    [agent, disabled, onSlashCommand, resolveTarget, setHistory]
+    [agent, disabled, onSlashCommand, resolveTarget, setHistory, readTerminalScreen]
   )
 
   return { dispatch, isDispatching }

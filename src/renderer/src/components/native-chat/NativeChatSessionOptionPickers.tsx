@@ -1,7 +1,6 @@
+import { PickerTrigger } from './NativeChatOptionPickerTrigger'
 import { memo, useState } from 'react'
-import { ChevronDown } from 'lucide-react'
 import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
 import { SwitchIndicator } from '@/components/ui/switch'
 import {
   DropdownMenu,
@@ -10,10 +9,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger
+  DropdownMenuSeparator
 } from '@/components/ui/dropdown-menu'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { translate } from '@/i18n/i18n'
 import { sortNativeChatSessionOptions } from '../../../../shared/native-chat-session-option-snapshot'
 import {
@@ -38,69 +35,6 @@ export type NativeChatSessionOptionPickersProps = {
   snapshot: SessionOptionDescriptor[]
   isWorking: boolean
   pickerRequest?: NativeChatOptionPickerRequest | null
-}
-
-function PickerTooltipContent(props: {
-  label: string
-  disabledReason?: string | null
-  dispatched: boolean
-}): React.JSX.Element {
-  return (
-    <div className="space-y-0.5">
-      <div>{props.disabledReason ?? props.label}</div>
-      {props.dispatched ? (
-        <div>
-          {translate(
-            'components.native-chat.composer.sentNotConfirmed',
-            'Sent to the agent — not confirmed'
-          )}
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
-function PickerTrigger(props: {
-  label: string
-  tooltipLabel: string
-  disabled: boolean
-  disabledReason?: string | null
-  dispatched: boolean
-}): React.JSX.Element {
-  // Why: value-only visible text must still include the category in the
-  // accessible name (WCAG 2.5.3 Label in Name / voice control).
-  const accessibleName =
-    props.label === props.tooltipLabel
-      ? props.tooltipLabel
-      : translate('components.native-chat.composer.pillAccessibleName', '{{value0}} {{value1}}', {
-          value0: props.tooltipLabel,
-          value1: props.label
-        })
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <DropdownMenuTrigger asChild disabled={props.disabled}>
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            aria-label={accessibleName}
-            className="max-w-48 text-muted-foreground"
-          >
-            <span className="truncate">{props.label}</span>
-            <ChevronDown className="size-3" />
-          </Button>
-        </DropdownMenuTrigger>
-      </TooltipTrigger>
-      <TooltipContent side="top" sideOffset={4}>
-        <PickerTooltipContent
-          label={props.tooltipLabel}
-          disabledReason={props.disabledReason}
-          dispatched={props.dispatched}
-        />
-      </TooltipContent>
-    </Tooltip>
-  )
 }
 
 function ChoiceBody(props: { label: string; description?: string }): React.JSX.Element {
