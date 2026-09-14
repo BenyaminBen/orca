@@ -7,15 +7,34 @@ import { getSshFilesystemProvider } from '../../../providers/ssh-filesystem-disp
 import { requireSshGitProvider } from '../../../providers/ssh-git-dispatch'
 import { joinWorktreeRelativePath } from '../../../runtime/runtime-relative-paths'
 import { getSetupRunnerEnvVars } from '../../../setup-hook-env-vars'
+import type { ArchiveHookRunResult } from '../../../../shared/worktree/archive-hook-removal-gate'
 
 const WORKTREE_ARCHIVE_HOOK_TIMEOUT_MS = 120_000
 
-export async function getArchiveHooksForRemoval(repo: Repo): Promise<OrcaHooks | null> {
-  if (!repo.connectionId) {
+/**
+ * Resolve the archive hook against the host that owns the worktree.
+ *
+ * A failed read is answered as "no hook", which is a known limitation rather than a judgement: a
+ * missing `orca.yaml` is indistinguishable from an unreachable one here, because the relay rewrites
+ * a non-numeric error code to `-32000` (`src/relay/dispatcher-rpc-routing.ts`), so nothing survives
+ * to tell ENOENT from a transport failure. Reporting it as unreadable fired on every SSH repo that
+ * simply has no orca.yaml; blocking on it would refuse those deletes outright. Distinguishing the
+ * two needs a provider contract that reports absence as a successful outcome — tracked in #20196.
+ *
+ * @param connectionId Overrides `repo.connectionId`, which answers null for a row that names its
+ *   owner only as `executionHostId: 'ssh:<target>'`. Callers holding a resolved removal route must
+ *   pass it, or an SSH-hosted repo is read on the local disk and its archive hook goes unseen.
+ */
+export async function getArchiveHooksForRemoval(
+  repo: Repo,
+  connectionId?: string
+): Promise<OrcaHooks | null> {
+  const owner = connectionId ?? repo.connectionId
+  if (!owner) {
     return getEffectiveHooks(repo)
   }
 
-  const fsProvider = getSshFilesystemProvider(repo.connectionId)
+  const fsProvider = getSshFilesystemProvider(owner)
   if (!fsProvider) {
     return getEffectiveHooksFromConfig(repo, null)
   }
@@ -33,7 +52,7 @@ export async function runRemoteArchiveHook(
   repo: Repo,
   worktreePath: string,
   script: string
-): Promise<{ success: boolean; output: string }> {
+): Promise<ArchiveHookRunResult> {
   if (!repo.connectionId) {
     return { success: true, output: '' }
   }
@@ -70,8 +89,15 @@ export async function runRemoteArchiveHook(
     .join('\n')
     .trim()
 
+  // Why (#19334): a spawn error or timeout means the host never reported an exit for this run, so
+  // the code is withheld and the gate classifies the failure `unverifiable` rather than `exited`.
+  const observedExit =
+    !result.spawnError && !result.timedOut && typeof result.exitCode === 'number'
+      ? result.exitCode
+      : undefined
   return {
-    success: !result.spawnError && !result.timedOut && result.exitCode === 0,
-    output
+    success: observedExit === 0,
+    output,
+    ...(observedExit !== undefined ? { exitCode: observedExit } : {})
   }
 }

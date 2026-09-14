@@ -11,6 +11,8 @@ import { resolveWorktreeRemovalMetadata } from '../../../worktree-removal-repo-o
 import { findRegisteredDeletableWorktree } from '../../../worktree-removal-safety'
 import { removeStaleLocalWorktreeRegistrationAfterFilesystemRemoval } from '../../../local-worktree-removal-recovery'
 import { runHook } from '../../../hooks'
+import type { ArchiveHookOverride } from '../../../../shared/worktree/archive-hook-removal-gate'
+import { gateWorktreeRemovalOnArchiveHook } from '../../../worktree-archive-hook-gate'
 import { withWorktreeRemoveStageSpan } from '../../../observability/instrumentation'
 import {
   cleanupUnusedWorktreePushTargetRemote,
@@ -124,10 +126,18 @@ export async function executeWorktreeRemoval(
     return removalResult ?? {}
   }
 
+  // No connectionId override here, deliberately: this path derives its host from the repo row
+  // (`getRepoExecutionHostId` in register-worktree-removal-handlers) and resolves its provider, git
+  // options, listing and dispatch from `repo.connectionId` alone. Passing a different owner to the
+  // hook reader would read one host's orca.yaml while running the other host's git. The runtime's
+  // SSH path is the one that carries a route owner separate from the row, and it passes it.
   const hooks = await getArchiveHooksForRemoval(repo)
 
   const archiveScript = hooks?.scripts.archive
 
+  // Precondition, not an advisory (#19334): both branches below stop PTYs and delete the
+  // checkout, so a hook failure has to throw here — before either is reached.
+  let archiveHookOverride: ArchiveHookOverride | undefined
   if (archiveScript && !args.skipArchive) {
     // Why the branch on connectionId: this block is shared by both flows, so a hardcoded
     // 'remote' would file every local archive hook under the SSH breakdown.
@@ -144,38 +154,40 @@ export async function executeWorktreeRemoval(
               undefined,
               localWorktreeGitOptions
             )
-        if (!result.success) {
-          console.error(`[hooks] archive hook failed for ${canonicalWorktreePath}:`, result.output)
-        }
+        archiveHookOverride = gateWorktreeRemovalOnArchiveHook({
+          worktreePath: canonicalWorktreePath,
+          result,
+          allowFailure: args.allowFailedArchiveHook === true
+        })
       }
     )
   }
 
   const remoteConnectionId = repo.connectionId ?? undefined
-  if (remoteConnectionId) {
-    return removeRegisteredRemoteWorktree(
-      context,
-      args,
-      repo,
-      repoId,
-      canonicalWorktreePath,
-      removalHostId,
-      registeredWorktree,
-      removedPushTarget,
-      provider!,
-      deleteBranch
-    )
-  }
-  return removeRegisteredLocalWorktree(
-    context,
-    args,
-    repo,
-    repoId,
-    canonicalWorktreePath,
-    removalHostId,
-    removedPushTarget,
-    localWorktreeGitOptions,
-    hasLocalWorktreeGitOptions,
-    deleteBranch
-  )
+  const result = remoteConnectionId
+    ? await removeRegisteredRemoteWorktree(
+        context,
+        args,
+        repo,
+        repoId,
+        canonicalWorktreePath,
+        removalHostId,
+        registeredWorktree,
+        removedPushTarget,
+        provider!,
+        deleteBranch
+      )
+    : await removeRegisteredLocalWorktree(
+        context,
+        args,
+        repo,
+        repoId,
+        canonicalWorktreePath,
+        removalHostId,
+        removedPushTarget,
+        localWorktreeGitOptions,
+        hasLocalWorktreeGitOptions,
+        deleteBranch
+      )
+  return archiveHookOverride ? { ...result, archiveHookOverride } : result
 }
