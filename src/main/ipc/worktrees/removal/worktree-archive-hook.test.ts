@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../../../shared/repo-types'
+import type * as HooksModule from '../../../hooks'
 
 const { getSshFilesystemProviderMock, getEffectiveHooksMock } = vi.hoisted(() => ({
   getSshFilesystemProviderMock: vi.fn(),
@@ -8,7 +9,13 @@ const { getSshFilesystemProviderMock, getEffectiveHooksMock } = vi.hoisted(() =>
 vi.mock('../../../providers/ssh-filesystem-dispatch', () => ({
   getSshFilesystemProvider: getSshFilesystemProviderMock
 }))
-vi.mock('../../../hooks', () => ({ getEffectiveHooks: getEffectiveHooksMock }))
+// Only `getEffectiveHooks` is stubbed: the module under test also imports `parseOrcaYaml` from
+// here, and replacing it wholesale made the parse throw into the fail-open catch — which answers
+// "no hook", so the test saw an empty result rather than an error.
+vi.mock('../../../hooks', async () => ({
+  ...(await vi.importActual<typeof HooksModule>('../../../hooks')),
+  getEffectiveHooks: getEffectiveHooksMock
+}))
 
 import { getArchiveHooksForRemoval } from './worktree-archive-hook'
 
@@ -31,11 +38,26 @@ describe('getArchiveHooksForRemoval owner resolution', () => {
     getEffectiveHooksMock.mockReturnValue(null)
   })
 
-  it('asks the execution host when only the route knows the connection', async () => {
-    await getArchiveHooksForRemoval(REMOTE_REPO, 'ssh-target')
+  // Why this reads a file rather than just checking the lookup key: SSH owner resolution has been
+  // wrong twice on this path, and both times the fix looked right. Asserting only that
+  // `'ssh-target'` was passed stops short of the thing that broke — whether the hook actually comes
+  // from the REMOTE orca.yaml. This drives a stubbed provider holding real content and asserts the
+  // returned script is the remote one.
+  it('returns the hook from the execution host\u2019s orca.yaml, not the local disk', async () => {
+    const readFile = vi.fn().mockResolvedValue({
+      isBinary: false,
+      content: 'scripts:\n  archive: remote-archive.sh\n'
+    })
+    getSshFilesystemProviderMock.mockReturnValue({ readFile })
+    // If the local reader were consulted it would answer with a DIFFERENT script, so a wrong
+    // resolution shows up as the wrong value rather than as a silent absence.
+    getEffectiveHooksMock.mockReturnValue({ scripts: { archive: 'local-archive.sh' } })
+
+    const hooks = await getArchiveHooksForRemoval(REMOTE_REPO, 'ssh-target')
 
     expect(getSshFilesystemProviderMock).toHaveBeenCalledWith('ssh-target')
-    // The local reader must never answer for a repo that lives on another host.
+    expect(readFile).toHaveBeenCalledWith('/home/orca/repo/orca.yaml')
+    expect(hooks?.scripts.archive).toBe('remote-archive.sh')
     expect(getEffectiveHooksMock).not.toHaveBeenCalled()
   })
 

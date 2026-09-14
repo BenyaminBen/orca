@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ARCHIVE_HOOK_TIMEOUT_MS } from '../../../../shared/worktree/archive-hook-removal-gate'
 import type { AppState } from '../types'
 import type { RuntimeEnvironmentCallRequest } from '../../runtime/runtime-compatibility-test-fixture'
 import { makeWorktree } from './worktrees-slice-test-fixtures'
@@ -64,7 +65,8 @@ describe('worktree remote runtime mutations', () => {
         allowUnverifiedPtyStop: false,
         runHooks: true
       },
-      timeoutMs: 60_000,
+      // Hooks run here, so the client must outlast the host's archive-hook budget (#19334).
+      timeoutMs: ARCHIVE_HOOK_TIMEOUT_MS + 60_000,
       expectedEnvironmentPairingRevision: undefined,
       expectedRuntimeId: undefined
     })
@@ -127,7 +129,8 @@ describe('worktree remote runtime mutations', () => {
         allowUnverifiedPtyStop: false,
         runHooks: true
       },
-      timeoutMs: 60_000,
+      // Hooks run here, so the client must outlast the host's archive-hook budget (#19334).
+      timeoutMs: ARCHIVE_HOOK_TIMEOUT_MS + 60_000,
       expectedEnvironmentPairingRevision: undefined,
       expectedRuntimeId: undefined
     })
@@ -225,7 +228,8 @@ describe('worktree remote runtime mutations', () => {
         allowUnverifiedPtyStop: false,
         runHooks: true
       },
-      timeoutMs: 60_000
+      // Hooks run here, so the client must outlast the host's archive-hook budget (#19334).
+      timeoutMs: ARCHIVE_HOOK_TIMEOUT_MS + 60_000
     })
     expect(mockApi.worktrees.remove).not.toHaveBeenCalled()
     expect(store.getState().worktreesByRepo['repo-ssh']).toEqual([])

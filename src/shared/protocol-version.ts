@@ -114,6 +114,10 @@ export const TERMINAL_QUICK_COMMANDS_RUNTIME_CAPABILITY = 'terminal.quick-comman
 // status.worktreeCreateIdempotency carries the optional host retention policy.
 export const WORKTREE_CREATE_IDEMPOTENCY_RUNTIME_CAPABILITY =
   'worktree.create-idempotency.v1' as const
+// Scope of the claim: a hook that RUNS and fails cannot delete the checkout. It does not promise
+// the hook was found — an SSH host whose orca.yaml cannot be read answers "no hook" and the removal
+// proceeds, because a failed read is indistinguishable from an absent file across the relay
+// (#20196 tracks the provider contract that would separate them).
 // Why (#19334): "accepts --run-hooks" and "refuses to delete when the archive hook fails" were
 // indistinguishable from the outside — both take the flag and behave identically on success, so
 // the only way to tell an unfixed host apart was to fail a hook and see whether the checkout

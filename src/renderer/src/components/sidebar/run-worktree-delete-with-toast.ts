@@ -38,6 +38,40 @@ export function runWorktreeDeleteWithToast(
     ...(options.suppressPreservedBranchToast ? { suppressPreservedBranchToast: true } : {}),
     ...(options.snapshotPruneBatchId ? { snapshotPruneBatchId: options.snapshotPruneBatchId } : {})
   }
+  const showFailureToast = (
+    error: string,
+    state: ReturnType<typeof getDeleteStateForWorktreeHost>
+  ): void => {
+    const hasKnownChanges =
+      (useAppStore.getState().gitStatusByWorktree[worktreeId]?.length ?? 0) > 0
+    showDeleteWorktreeFailureToast({
+      error,
+      canForceDelete: state?.canForceDelete ?? false,
+      canWaiveArchiveHook: state?.canWaiveArchiveHook === true,
+      forceDeleteReason: state?.forceDeleteReason ?? null,
+      lockReason: state?.lockReason ?? null,
+      hasKnownChanges,
+      onViewChanges: () => viewWorktreeDiff(worktreeId, target.executionHostId),
+      // Why (#19334): re-runs the archive hook and waives the failure this time, so the waiver
+      // is an informed choice made after reading the refusal -- not something `force` implied.
+      onDeleteAnyway: () =>
+        retryFromToast({ force: options.force === true, allowFailedArchiveHook: true }),
+      // The explicit Force Delete retry may waive an unverified PTY-stop proof.
+      onForceDelete: () =>
+        retryFromToast({
+          force: true,
+          allowUnverifiedPtyStop: true,
+          failedTitle: translate(
+            'auto.components.sidebar.delete.worktree.flow.4f3876c0f5',
+            'Force delete failed'
+          ),
+          withViewAction: true
+        }),
+      worktreeId,
+      worktreeName
+    })
+  }
+
   // Both toast buttons do the same thing: recapture focus (the user may have navigated while the
   // toast was open), retry with one waiver added, and report a success through `onForceDeleted` so
   // the caller's bookkeeping runs. Only the waiver and the failure copy differ.
@@ -57,7 +91,20 @@ export function runWorktreeDeleteWithToast(
           }
         }
       : {}
+    // Why re-show the full failure toast rather than a bare `toast.error` (#19334): a retry can
+    // fail for a DIFFERENT reason than the one the user just answered. Waiving a failed archive
+    // hook on a dirty checkout lands on the dirty preflight next, and a bare error offers no
+    // buttons — leaving the user stuck one step further in, which is the dead end this gate has
+    // now produced three times. Routing back through the same toast keeps every retry actionable.
     const failed = (description: string): void => {
+      const retryState = getDeleteStateForWorktreeHost(
+        { id: worktreeId, hostId: target.executionHostId ?? undefined },
+        useAppStore.getState().deleteStateByWorktreeId
+      )
+      if (retryState?.canForceDelete === true || retryState?.canWaiveArchiveHook === true) {
+        showFailureToast(description, retryState)
+        return
+      }
       toast.error(
         retry.failedTitle ??
           translate(
@@ -109,39 +156,13 @@ export function runWorktreeDeleteWithToast(
         }
         return true
       }
-      const state = getDeleteStateForWorktreeHost(
-        { id: worktreeId, hostId: target.executionHostId ?? undefined },
-        useAppStore.getState().deleteStateByWorktreeId
+      showFailureToast(
+        result.error,
+        getDeleteStateForWorktreeHost(
+          { id: worktreeId, hostId: target.executionHostId ?? undefined },
+          useAppStore.getState().deleteStateByWorktreeId
+        )
       )
-      const canForceDelete = state?.canForceDelete ?? false
-      const hasKnownChanges =
-        (useAppStore.getState().gitStatusByWorktree[worktreeId]?.length ?? 0) > 0
-      showDeleteWorktreeFailureToast({
-        error: result.error,
-        canForceDelete,
-        canWaiveArchiveHook: state?.canWaiveArchiveHook === true,
-        forceDeleteReason: state?.forceDeleteReason ?? null,
-        lockReason: state?.lockReason ?? null,
-        hasKnownChanges,
-        onViewChanges: () => viewWorktreeDiff(worktreeId, target.executionHostId),
-        // Why (#19334): re-runs the archive hook and waives the failure this time, so the waiver
-        // is an informed choice made after reading the refusal -- not something `force` implied.
-        onDeleteAnyway: () =>
-          retryFromToast({ force: options.force === true, allowFailedArchiveHook: true }),
-        // The explicit Force Delete retry may waive an unverified PTY-stop proof.
-        onForceDelete: () =>
-          retryFromToast({
-            force: true,
-            allowUnverifiedPtyStop: true,
-            failedTitle: translate(
-              'auto.components.sidebar.delete.worktree.flow.4f3876c0f5',
-              'Force delete failed'
-            ),
-            withViewAction: true
-          }),
-        worktreeId,
-        worktreeName
-      })
       return false
     })
     .catch((err: unknown) => {

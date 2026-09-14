@@ -2,6 +2,14 @@
 // about to delete. A failed hook used to be logged and stepped over, so the delete went ahead
 // with nothing archived. It is a precondition, evaluated before any stop/delete mutation.
 
+/**
+ * How long an archive hook gets before it is cut off. Shared because a client waiting on a removal
+ * has to outlast it: a client that gives up first reports a failure for a hook that is still
+ * running, and the host then completes the delete anyway — telling the user the opposite of what
+ * happened to their checkout (#19334).
+ */
+export const ARCHIVE_HOOK_TIMEOUT_MS = 120_000
+
 /** RPC/CLI error code for a removal refused because the repo's archive hook did not succeed. */
 export const ARCHIVE_HOOK_FAILED_REMOVAL_CODE = 'worktree_archive_hook_failed'
 
