@@ -21,15 +21,26 @@ export type NativeChatLinkActions = {
   closeLinkActions: (dismissed?: LinkActionRequest) => void
 }
 
-/** Transcript links: file targets open in Orca, http(s) targets offer the same
- *  destination popover the terminal shows. */
+/** Transcript files and web links share the terminal's destination popover. */
 export function useNativeChatLinkActions(
   context: NativeChatFileLinkContext | null,
   rootRef: RefObject<HTMLElement | null>,
   scope: { sessionId: string | null; isVisible: boolean }
 ): NativeChatLinkActions {
-  const openFileLink = useNativeChatFileLinkClick(context)
   const [linkActionRequest, setLinkActionRequest] = useState<LinkActionRequest | null>(null)
+  const getFileActions = useCallback(
+    (event: Parameters<CommentMarkdownLinkClickHandler>[0]) => {
+      const anchor = event.currentTarget
+      return {
+        enabled: useAppStore.getState().settings?.terminalLinkActionPopoverEnabled !== false,
+        request: setLinkActionRequest,
+        restoreFocus: () =>
+          (anchor.isConnected ? anchor : rootRef.current)?.focus({ preventScroll: true })
+      }
+    },
+    [rootRef]
+  )
+  const openFileLink = useNativeChatFileLinkClick(context, getFileActions)
   const scopeKey = JSON.stringify([
     context?.worktreeId,
     context?.runtimeEnvironmentId,

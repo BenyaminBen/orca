@@ -8,8 +8,14 @@ import {
   buildWorkspaceFileContext,
   canClientOsOpenWorkspaceFile
 } from '@/lib/workspace-file-host-routing'
-import { statRuntimePath, type RuntimeFileOperationArgs } from '@/runtime/runtime-file-client'
+import {
+  getRuntimeFileReadScope,
+  statRuntimePath,
+  type RuntimeFileOperationArgs
+} from '@/runtime/runtime-file-client'
 import { useAppStore } from '@/store'
+import { toast } from 'sonner'
+import { translate } from '@/i18n/i18n'
 import { activateAndRevealWorkspace, activateAndRevealWorktree } from '@/lib/worktree-activation'
 import { resolveKnownWorktreeRootPathLink } from './terminal-worktree-path-link'
 import { parseWslUncPath, toWindowsWslPath } from '../../../../shared/wsl-paths'
@@ -26,6 +32,9 @@ type TerminalFileOpenDeps = {
   runtimeEnvironmentId?: string | null
   wslDistro?: string | null
   openWithSystemDefault?: boolean
+  fileContext?: RuntimeFileOperationArgs
+  openDirectoryInOrca?: boolean
+  onOpenError?: () => void
 }
 
 export function isHtmlFilePath(filePath: string): boolean {
@@ -140,11 +149,11 @@ export function openDetectedFilePath(
 
   void (async () => {
     let statResult
-    const fileContext = getTerminalFileContext(worktreeId, worktreePath, runtimeEnvironmentId)
-    const canOpenWithSystemDefault = shouldOpenTerminalFileWithSystemDefault(
-      fileContext,
-      mappedFilePath
-    )
+    const fileContext =
+      deps.fileContext ?? getTerminalFileContext(worktreeId, worktreePath, runtimeEnvironmentId)
+    const canOpenWithSystemDefault =
+      !getRuntimeFileReadScope(fileContext.settings, fileContext.connectionId) &&
+      shouldOpenTerminalFileWithSystemDefault(fileContext, mappedFilePath)
 
     if (!openWithSystemDefault) {
       const worktreeRootLink = resolveKnownWorktreeRootPathLink(mappedFilePath)
@@ -167,6 +176,7 @@ export function openDetectedFilePath(
       }
       statResult = await statRuntimePath(fileContext, mappedFilePath)
     } catch {
+      deps.onOpenError?.()
       return
     }
 
@@ -184,6 +194,20 @@ export function openDetectedFilePath(
     }
 
     if (statResult.isDirectory) {
+      if (deps.openDirectoryInOrca && !openWithSystemDefault) {
+        if (isPathInsideWorktree(mappedFilePath, worktreePath)) {
+          activateAndRevealWorkspace(worktreeId, { providesInitialSurface: true })
+          useAppStore.getState().revealInExplorer(worktreeId, mappedFilePath)
+        } else {
+          toast.error(
+            translate(
+              'components.native-chat.file.folderOutsideWorkspace',
+              'This folder is outside the current workspace. Use the file manager to open it.'
+            )
+          )
+        }
+        return
+      }
       if (canOpenWithSystemDefault) {
         await window.api.shell.openFilePath(mappedFilePath)
       }

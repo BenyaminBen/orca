@@ -49,6 +49,34 @@ vi.mock('@/lib/runtime-workspace-file-route', () => ({
 installTerminalLinkTestEnvironment(doubles)
 
 describe('handleOscLink', () => {
+  it('opens a chat directory in the Orca explorer instead of the system file manager', async () => {
+    statMock.mockResolvedValueOnce({ isDirectory: true })
+    openDetectedFilePath('/tmp/src', null, null, { ...deps, openDirectoryInOrca: true })
+    await flushAsyncWork()
+    expect(storeState.revealInExplorer).toHaveBeenCalledWith('wt-1', '/tmp/src')
+    expect(activateAndRevealWorkspace).toHaveBeenCalledWith('wt-1', {
+      providesInitialSurface: true
+    })
+    expect(openFilePathMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps legacy terminal directory opening unchanged', async () => {
+    statMock.mockResolvedValueOnce({ isDirectory: true })
+    openDetectedFilePath('/tmp/src', null, null, deps)
+    await flushAsyncWork()
+    expect(openFilePathMock).toHaveBeenCalledWith('/tmp/src')
+    expect(storeState.revealInExplorer).not.toHaveBeenCalled()
+  })
+
+  it('reports a missing chat file to the caller', async () => {
+    statMock.mockRejectedValueOnce(new Error('File not found'))
+    const onOpenError = vi.fn()
+    openDetectedFilePath('/tmp/missing.ts', null, null, { ...deps, onOpenError })
+    await flushAsyncWork()
+    expect(onOpenError).toHaveBeenCalledOnce()
+    expect(openFileMock).not.toHaveBeenCalled()
+  })
+
   it('opens local .html file paths in Orca browser tabs with the platform modifier', async () => {
     setPlatform('Macintosh')
 
