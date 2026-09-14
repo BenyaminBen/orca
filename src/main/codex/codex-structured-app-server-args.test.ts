@@ -2,6 +2,24 @@ import { describe, expect, it } from 'vitest'
 import { resolveCodexStructuredAppServerArgs } from './codex-structured-app-server-args'
 
 describe('structured Codex app-server arguments', () => {
+  it.each(['--dangerously-bypass-approvals-and-sandbox', '--yolo'])(
+    'translates %s into policies applied to app-server threads',
+    (configured) => {
+      expect(resolveCodexStructuredAppServerArgs(configured, 'posix')).toEqual([
+        '-c',
+        'approval_policy=never',
+        '-c',
+        'sandbox_mode=danger-full-access'
+      ])
+    }
+  )
+
+  it('translates approval and sandbox flags into app-server config overrides', () => {
+    expect(
+      resolveCodexStructuredAppServerArgs('--ask-for-approval never -s workspace-write', 'posix')
+    ).toEqual(['-c', 'approval_policy=never', '-c', 'sandbox_mode=workspace-write'])
+  })
+
   it('keeps configuration flags and converts effort to the app-server config contract', () => {
     expect(
       resolveCodexStructuredAppServerArgs(

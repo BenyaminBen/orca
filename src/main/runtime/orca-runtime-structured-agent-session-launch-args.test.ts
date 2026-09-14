@@ -53,8 +53,12 @@ describe('structured agent-session launch args wiring', () => {
     })
 
     const codexArgs = await deps.resolveLaunchArgs('codex')
-    expect(codexArgs).not.toContain('--dangerously-skip-permissions')
-    expect(codexArgs.length).toBeGreaterThan(0)
+    expect(codexArgs).toEqual([
+      '-c',
+      'approval_policy=never',
+      '-c',
+      'sandbox_mode=danger-full-access'
+    ])
   })
 
   it('never lets a broken Codex args configuration block a Claude session', async () => {

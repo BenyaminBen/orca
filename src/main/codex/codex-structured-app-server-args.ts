@@ -24,7 +24,6 @@ const VALUE_FLAGS = new Set([
 
 const BOOLEAN_FLAGS = new Set([
   '--approve-for-me',
-  '--dangerously-bypass-approvals-and-sandbox',
   '--dangerously-bypass-hook-trust',
   '--oss',
   '--search',
@@ -63,6 +62,13 @@ export function resolveCodexStructuredAppServerArgs(
   for (let index = 0; index < parsed.tokens.length; index += 1) {
     const token = parsed.tokens[index]
     const { flag, inlineValue } = splitOption(token)
+    if (
+      (flag === '--dangerously-bypass-approvals-and-sandbox' || flag === '--yolo') &&
+      inlineValue === undefined
+    ) {
+      result.push('-c', 'approval_policy=never', '-c', 'sandbox_mode=danger-full-access')
+      continue
+    }
     if (BOOLEAN_FLAGS.has(flag) && inlineValue === undefined) {
       result.push(flag)
       continue
@@ -74,7 +80,11 @@ export function resolveCodexStructuredAppServerArgs(
     if (value === undefined || value.length === 0) {
       throw configuredArgsError(`${flag} requires a value`)
     }
-    if (EFFORT_FLAGS.has(flag)) {
+    if (flag === '-a' || flag === '--ask-for-approval') {
+      result.push('-c', `approval_policy=${value}`)
+    } else if (flag === '-s' || flag === '--sandbox') {
+      result.push('-c', `sandbox_mode=${value}`)
+    } else if (EFFORT_FLAGS.has(flag)) {
       result.push('-c', `model_reasoning_effort=${value}`)
     } else {
       result.push(flag, value)
