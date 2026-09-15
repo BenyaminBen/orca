@@ -169,14 +169,36 @@ describe('file destinations in chat responses', () => {
     }
   )
 
-  it('downloads an SSH file before revealing its local copy', async () => {
-    mocks.fileContext = { ...mocks.fileContext, connectionId: 'remote' }
+  it.each(['ssh', 'paired'])(
+    'delegates download and reveal to the local application for %s',
+    async (route) => {
+      mocks.fileContext =
+        route === 'ssh'
+          ? { ...mocks.fileContext, connectionId: 'remote' }
+          : { ...mocks.fileContext, settings: { activeRuntimeEnvironmentId: 'paired' } }
+      render(<Transcript />)
+      fireEvent.click(screen.getByRole('link'))
+      fireEvent.click(await screen.findByRole('button', { name: /Download and reveal in Finder/ }))
+      await waitFor(() =>
+        expect(mocks.download).toHaveBeenCalledWith(
+          mocks.fileContext,
+          '/repo/src/main.ts',
+          'main.ts',
+          'reveal'
+        )
+      )
+      expect(mocks.reveal).not.toHaveBeenCalled()
+      expect(mocks.error).not.toHaveBeenCalled()
+    }
+  )
+
+  it('keeps the existing error toast when downloaded-file reveal fails', async () => {
+    mocks.fileContext.settings = { activeRuntimeEnvironmentId: 'paired' }
+    mocks.download.mockRejectedValue(new Error('reveal failed'))
     render(<Transcript />)
-    fireEvent.click(screen.getByRole('link'))
-    fireEvent.click(await screen.findByRole('button', { name: /Download and reveal in Finder/ }))
-    await waitFor(() => expect(mocks.reveal).toHaveBeenCalledWith('/downloads/main.ts'))
-    expect(mocks.download).toHaveBeenCalledWith(mocks.fileContext, '/repo/src/main.ts', 'main.ts')
-    expect(mocks.reveal).not.toHaveBeenCalledWith('/repo/src/main.ts')
+    fireEvent.click(screen.getByRole('link'), { metaKey: true, shiftKey: true })
+    await waitFor(() => expect(mocks.error).toHaveBeenCalledOnce())
+    expect(mocks.reveal).not.toHaveBeenCalled()
   })
 
   it('dismisses a file destination choice when its chat is hidden', async () => {

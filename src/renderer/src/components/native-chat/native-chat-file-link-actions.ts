@@ -47,13 +47,10 @@ export function handleNativeChatFileLink(
     })
   const reveal = async (): Promise<void> => {
     try {
-      let path = target.absolutePath
+      const path = target.absolutePath
       if (remote) {
-        const result = await downloadRuntimeFile(fileContext, path, basename(path))
-        if (result.canceled) {
-          return
-        }
-        path = result.destinationPath
+        await downloadRuntimeFile(fileContext, path, basename(path), 'reveal')
+        return
       }
       const result = await window.api.shell.openInFileManager(path)
       if (!result.ok) {

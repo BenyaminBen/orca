@@ -17325,6 +17325,18 @@
         "selectedAndActive": "Selected: {{desired}}. Active: {{current}}.",
         "activeForMessages": "Messages use the active permissions.",
         "retry": "Retry restoration"
+      },
+      "file": {
+        "openFailed": "Could not open this path. It may no longer be available.",
+        "revealFailed": "Could not reveal this file. It may no longer be available.",
+        "openInOrca": "Open in Orca",
+        "downloadAndReveal": "Download and reveal in {{manager}}",
+        "reveal": "Reveal in {{manager}}",
+        "folderOutsideWorkspace": "This folder is outside the current workspace. Use the file manager to open it."
+      },
+      "image": {
+        "openFailed": "Could not open the image. The file may no longer be available.",
+        "openInPreview": "Open in Orca preview"
       }
     },
     "tab": {

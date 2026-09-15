@@ -11,9 +11,10 @@ import {
 } from './runtime-file-client-test-harness'
 
 installRuntimeFileClientEnvironment()
+const downloadActions = [undefined, 'reveal'] as const
 
 describe('runtime file client', () => {
-  it('downloads remote runtime files in chunks instead of using preview content', async () => {
+  it.each(downloadActions)('downloads chunks with action %s', async (postDownloadAction) => {
     fsStartDownloadedFile.mockResolvedValue({
       canceled: false,
       transferId: 'download-1',
@@ -52,7 +53,8 @@ describe('runtime file client', () => {
           worktreePath: '/remote/repo'
         },
         '/remote/repo/archive.zip',
-        'archive.zip'
+        'archive.zip',
+        postDownloadAction
       )
     ).resolves.toEqual({ canceled: false, destinationPath: '/downloads/archive.zip' })
 
@@ -91,7 +93,10 @@ describe('runtime file client', () => {
       timeoutMs: 60_000
     })
     expect(fsAppendDownloadedFileChunk).toHaveBeenCalledTimes(2)
-    expect(fsFinishDownloadedFile).toHaveBeenCalledWith({ transferId: 'download-1' })
+    expect(fsFinishDownloadedFile).toHaveBeenCalledWith({
+      transferId: 'download-1',
+      postDownloadAction
+    })
     expect(fsCancelDownloadedFile).not.toHaveBeenCalled()
   })
 
@@ -114,7 +119,7 @@ describe('runtime file client', () => {
     expect(fsSaveDownloadedFile).not.toHaveBeenCalled()
   })
 
-  it('falls back to preview content when older remote runtimes lack chunked download', async () => {
+  it.each(downloadActions)('uses old-server preview with action %s', async (postDownloadAction) => {
     fsSaveDownloadedFile.mockResolvedValue({
       canceled: false,
       destinationPath: '/downloads/report.txt'
@@ -144,7 +149,8 @@ describe('runtime file client', () => {
           worktreePath: '/remote/repo'
         },
         '/remote/repo/report.txt',
-        'report.txt'
+        'report.txt',
+        postDownloadAction
       )
     ).resolves.toEqual({ canceled: false, destinationPath: '/downloads/report.txt' })
 
@@ -152,6 +158,7 @@ describe('runtime file client', () => {
     expect(fsSaveDownloadedFile).toHaveBeenCalledWith({
       suggestedName: 'report.txt',
       content: 'hello\n',
+      postDownloadAction,
       encoding: 'utf8'
     })
     expect(runtimeEnvironmentCall).toHaveBeenNthCalledWith(2, {

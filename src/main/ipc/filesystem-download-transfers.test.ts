@@ -13,6 +13,7 @@ import {
   rmMock,
   getSshFilesystemProviderMock,
   promoteLocalDownloadedFolderMock,
+  showItemInFolderMock,
   resetFilesystemIpcMocks
 } from './filesystem-test-harness'
 
@@ -226,32 +227,44 @@ describe('registerFilesystemHandlers', () => {
     expect(provider.downloadFile).not.toHaveBeenCalled()
   })
 
-  it('downloads to a temp sibling then promotes a new destination', async () => {
-    const provider = {
-      stat: vi.fn().mockResolvedValue({ size: 10, type: 'file', mtime: 123 }),
-      downloadFile: vi.fn().mockResolvedValue(undefined)
+  it.each([undefined, 'reveal'] as const)(
+    'downloads then performs the optional action %s',
+    async (postDownloadAction) => {
+      const provider = {
+        stat: vi.fn().mockResolvedValue({ size: 10, type: 'file', mtime: 123 }),
+        downloadFile: vi.fn().mockResolvedValue(undefined)
+      }
+      getSshFilesystemProviderMock.mockReturnValue(provider)
+      showSaveDialogMock.mockResolvedValue({ canceled: false, filePath: '/downloads/report.pdf' })
+      statMock.mockRejectedValue(Object.assign(new Error('missing'), { code: 'ENOENT' }))
+      registerFilesystemHandlers(store as never)
+
+      await expect(
+        handlers.get('fs:downloadFile')!(
+          { sender: {} },
+          {
+            filePath: '/remote/report.pdf',
+            connectionId: 'ssh-1',
+            postDownloadAction
+          }
+        )
+      ).resolves.toEqual({ canceled: false, destinationPath: '/downloads/report.pdf' })
+
+      const tempPath = provider.downloadFile.mock.calls[0][1]
+      expect(path.dirname(tempPath)).toBe(path.normalize('/downloads'))
+      expect(provider.downloadFile).toHaveBeenCalledWith('/remote/report.pdf', tempPath)
+      expect(renameMock).toHaveBeenCalledWith(tempPath, '/downloads/report.pdf')
+      expect(rmMock).not.toHaveBeenCalledWith(tempPath, expect.anything())
+      if (postDownloadAction) {
+        expect(showItemInFolderMock).toHaveBeenCalledWith('/downloads/report.pdf')
+        expect(renameMock.mock.invocationCallOrder[0]).toBeLessThan(
+          showItemInFolderMock.mock.invocationCallOrder[0]!
+        )
+      } else {
+        expect(showItemInFolderMock).not.toHaveBeenCalled()
+      }
     }
-    getSshFilesystemProviderMock.mockReturnValue(provider)
-    showSaveDialogMock.mockResolvedValue({ canceled: false, filePath: '/downloads/report.pdf' })
-    statMock.mockRejectedValue(Object.assign(new Error('missing'), { code: 'ENOENT' }))
-    registerFilesystemHandlers(store as never)
-
-    await expect(
-      handlers.get('fs:downloadFile')!(
-        { sender: {} },
-        {
-          filePath: '/remote/report.pdf',
-          connectionId: 'ssh-1'
-        }
-      )
-    ).resolves.toEqual({ canceled: false, destinationPath: '/downloads/report.pdf' })
-
-    const tempPath = provider.downloadFile.mock.calls[0][1]
-    expect(path.dirname(tempPath)).toBe(path.normalize('/downloads'))
-    expect(provider.downloadFile).toHaveBeenCalledWith('/remote/report.pdf', tempPath)
-    expect(renameMock).toHaveBeenCalledWith(tempPath, '/downloads/report.pdf')
-    expect(rmMock).not.toHaveBeenCalledWith(tempPath, expect.anything())
-  })
+  )
 
   it('streams runtime download chunks to a temp sibling then promotes on finish', async () => {
     const writeFile = vi.fn().mockResolvedValue(undefined)
@@ -280,7 +293,9 @@ describe('registerFilesystemHandlers', () => {
         contentBase64: Buffer.from('hello').toString('base64')
       })
     ).resolves.toEqual({ ok: true })
-    await expect(handlers.get('fs:finishDownloadedFile')!(null, { transferId })).resolves.toEqual({
+    await expect(
+      handlers.get('fs:finishDownloadedFile')!(null, { transferId, postDownloadAction: 'reveal' })
+    ).resolves.toEqual({
       canceled: false,
       destinationPath: '/downloads/report.pdf'
     })
@@ -291,6 +306,10 @@ describe('registerFilesystemHandlers', () => {
     expect(writeFile).toHaveBeenCalledWith(Buffer.from('hello'))
     expect(close).toHaveBeenCalled()
     expect(renameMock).toHaveBeenCalledWith(tempPath, '/downloads/report.pdf')
+    expect(showItemInFolderMock).toHaveBeenCalledWith('/downloads/report.pdf')
+    expect(renameMock.mock.invocationCallOrder[0]).toBeLessThan(
+      showItemInFolderMock.mock.invocationCallOrder[0]!
+    )
   })
 
   it('cleans up a runtime download temp file on cancel', async () => {
