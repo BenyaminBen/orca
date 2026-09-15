@@ -51,8 +51,7 @@ export function useStructuredAgentSession(args: {
   isVisible: boolean
 }) {
   const { agent, isVisible, sessionId, target } = args
-  // Declared first: the hold is what gives a restored session its provider child back, and the
-  // read below is useless for sending until it lands.
+  // Acquire the provider child before reading a restored session.
   useStructuredAgentSessionHold({ sessionId, target, surface: 'desktop-chat', enabled: isVisible })
   const { state, loadingOlder, loadOlder } = useStructuredAgentSessionRead(args)
   const stateRef = useRef(state)
@@ -100,8 +99,7 @@ export function useStructuredAgentSession(args: {
 
   // Refresh options each turn to confirm which model the provider actually selected.
   const turnId = activeStructuredAgentSessionTurnId(state.items)
-  // A dispatch the provider has not answered is already work; Claude's running row trails the
-  // send by seconds, and only a provider-minted turn is cancellable, so the two stay separate.
+  // Unanswered dispatches count as work before the provider reports a cancellable turn.
   const isWorking =
     turnId !== null || hasUnansweredStructuredAgentSessionDispatch(state.submissions, state.fence)
   const turnActivity = useMemo(
@@ -141,7 +139,7 @@ export function useStructuredAgentSession(args: {
     [optionState]
   )
   const setStructuredOption = useCallback(
-    async (id: string, value: string | boolean): Promise<boolean> => {
+    async (id: string, value: string | boolean, retryPermissions = false): Promise<boolean> => {
       const currentState = optionStateRef.current
       const encoded = encodeStructuredAgentSessionOptionValue(id, value)
       if (
@@ -155,7 +153,7 @@ export function useStructuredAgentSession(args: {
         pendingOptionRef.current !== null ||
         !optionCatalog ||
         encoded === null ||
-        !canSetStructuredAgentSessionOption(currentState, id, value)
+        !canSetStructuredAgentSessionOption(currentState, id, value, retryPermissions)
       ) {
         return false
       }
@@ -225,23 +223,29 @@ export function useStructuredAgentSession(args: {
     },
     [agent, mutate, optionCatalog, sessionId, target, updateOptionState]
   )
-  const setOption = useCallback(
-    async (id: string, value: string | boolean) => {
-      if (!(await setStructuredOption(id, value))) {
-        throw new Error('The chat could not accept this option change. Try again when it is idle.')
-      }
-      return { snapshot: structuredAgentSessionOptionSnapshot(optionStateRef.current) }
-    },
-    [setStructuredOption]
-  )
   const optionSurface = useMemo<SessionOptionsSurface>(
     () => ({
       getSnapshot: () => optionSnapshot,
-      setOption,
-      invokeAction: async () => ({ snapshot: optionSnapshot }),
+      setOption: async (id, value) => {
+        if (!(await setStructuredOption(id, value))) {
+          throw new Error(
+            'The chat could not accept this option change. Try again when it is idle.'
+          )
+        }
+        return { snapshot: structuredAgentSessionOptionSnapshot(optionStateRef.current) }
+      },
+      invokeAction: async (id) => {
+        const desired = optionStateRef.current.permissions?.desired
+        if (id !== 'permissions' || !desired || !(await setStructuredOption(id, desired, true))) {
+          throw new Error(
+            'The selected permissions could not be restored. Messages still use the active permissions.'
+          )
+        }
+        return { snapshot: structuredAgentSessionOptionSnapshot(optionStateRef.current) }
+      },
       subscribe: () => () => {}
     }),
-    [optionSnapshot, setOption]
+    [optionSnapshot, setStructuredOption]
   )
 
   const prompts = pendingStructuredSessionPrompts(state.items)

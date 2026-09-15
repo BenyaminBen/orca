@@ -12,6 +12,11 @@ export function nativeChatPermissionOption(
     id: 'permissions',
     label: 'Permissions',
     category: 'permissions',
+    permissionState: {
+      current: permissions.current,
+      desired: permissions.desired,
+      restoration: permissions.restoration
+    },
     kind: {
       type: 'select',
       currentValue: permissions.pending ?? permissions.current,

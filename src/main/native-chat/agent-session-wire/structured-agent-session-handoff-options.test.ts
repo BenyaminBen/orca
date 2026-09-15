@@ -25,11 +25,6 @@ import type {
   StructuredAgentSessionHandoffTransport,
   StructuredTuiOwner
 } from './structured-agent-session-handoff-types'
-import {
-  codexPermissionPolicy,
-  decodeCodexPermissionPolicy,
-  type CodexPermissionPolicy
-} from '../../../shared/codex-permissions'
 
 const CALLER = { callerKey: 'client-1' }
 const DEFAULT_MODEL = 'gpt-default'
@@ -46,8 +41,6 @@ let activeEffort: string | null
 let activeFastMode: boolean | null
 let transcriptPath: string
 let optionFailure: Error | null
-let activePermissions: CodexPermissionPolicy | undefined
-let transport: StructuredAgentSessionHandoffTransport
 const dispatchedModels: string[] = []
 const launchedOptions: (Readonly<Record<string, string>> | undefined)[] = []
 const closedTuiOwners: StructuredTuiOwner[] = []
@@ -119,7 +112,6 @@ function adapter(): StructuredAgentSessionAdapter {
     activeModel = options?.model ?? DEFAULT_MODEL
     activeEffort = options?.effort ?? null
     activeFastMode = options?.fastMode === undefined ? null : options.fastMode === 'true'
-    activePermissions = decodeCodexPermissionPolicy(options?.permissionState)
     return {
       process: {
         hostId: 'local',
@@ -167,7 +159,6 @@ function adapter(): StructuredAgentSessionAdapter {
       }
     }),
     readOptions: vi.fn(async () => ({
-      ...(activePermissions ? { permissions: { policy: activePermissions, choices: [] } } : {}),
       current: {
         model: activeModel,
         ...(activeEffort ? { effort: activeEffort } : {}),
@@ -189,8 +180,6 @@ beforeEach(async () => {
   activeEffort = null
   activeFastMode = null
   optionFailure = null
-  activePermissions = undefined
-  transport = handoffTransport()
   dispatchedModels.length = 0
   launchedOptions.length = 0
   closedTuiOwners.length = 0
@@ -214,7 +203,7 @@ beforeEach(async () => {
     journalRoot: root,
     claimKeyId: 'key-1',
     mintSpawnToken: () => 'spawn-native',
-    handoffTransport: transport,
+    handoffTransport: handoffTransport(),
     now: () => NOW
   })
   const attached = await host.attach(
@@ -230,48 +219,6 @@ afterEach(async () => {
 })
 
 describe('structured session handoff options', () => {
-  it('replaces saved native permissions with the mode reported by the terminal', async () => {
-    activePermissions = codexPermissionPolicy('full-access')
-    const terminalPolicy = codexPermissionPolicy('ask-for-approval')
-    transport.readTuiPermissions = vi.fn(async () => terminalPolicy)
-    expect(await host.requestHandoff(CALLER, handoff('to-tui'))).toMatchObject({ ok: true })
-    await vi.waitFor(async () =>
-      expect(await host.handoffStatus(SESSION)).toMatchObject({ owner: 'tui' })
-    )
-    expect(decodeCodexPermissionPolicy(launchedOptions[0]?.permissionState)).toEqual(
-      activePermissions
-    )
-    expect(await host.requestHandoff(CALLER, handoff('to-native'))).toMatchObject({ ok: true })
-    await vi.waitFor(async () =>
-      expect(await host.handoffStatus(SESSION)).toMatchObject({ owner: 'native' })
-    )
-    expect(transport.readTuiPermissions).toHaveBeenCalledWith(
-      expect.objectContaining({ terminal: expect.objectContaining({ handle: 'term-tui' }) }),
-      { exited: false }
-    )
-    expect(
-      decodeCodexPermissionPolicy(acquire.mock.calls[1]?.[0].options?.permissionState)
-    ).toEqual(terminalPolicy)
-    expect(decodeCodexPermissionPolicy(store.getRecord(SESSION)?.options?.permissionState)).toEqual(
-      terminalPolicy
-    )
-  })
-
-  it('leaves the terminal running if its current permissions cannot be read', async () => {
-    transport.readTuiPermissions = async () => {
-      throw new Error('Permission state unavailable')
-    }
-    expect(await host.requestHandoff(CALLER, handoff('to-tui'))).toMatchObject({ ok: true })
-    await vi.waitFor(async () =>
-      expect(await host.handoffStatus(SESSION)).toMatchObject({ owner: 'tui' })
-    )
-    await host.requestHandoff(CALLER, handoff('to-native'))
-    await vi.waitFor(async () =>
-      expect(await host.handoffStatus(SESSION)).toMatchObject({ owner: 'tui', phase: 'failed' })
-    )
-    expect(closedTuiOwners).toHaveLength(0)
-    expect(acquire).toHaveBeenCalledTimes(1)
-  })
   it('settles a pre-mutation rejection so a fresh retry can succeed', async () => {
     optionFailure = new AgentSessionOptionRejectedError('model list unavailable')
     const fields = { key: 'model', value: PICKED_MODEL }

@@ -183,6 +183,10 @@
         "heading": "Remote browsing",
         "headingDescription": "Where remote workspace pages render, and where their network traffic leaves from."
       }
+    },
+    "general": {
+      "fullAccessConfirmation": "Ask Before Enabling Full Access",
+      "fullAccessConfirmationDescription": "Confirm before a chat switches to unrestricted commands and network access."
     }
   },
   "menu": {
@@ -17096,7 +17100,7 @@
         "pillAccessibleName": "{{value0}} {{value1}}",
         "valueIsDefault": "Default",
         "valueNotReported": "Not reported",
-        "sentNotConfirmed": "Sent to the agent — not confirmed",
+        "sentNotConfirmed": "Sent to the agent - not confirmed",
         "setWhenSessionStarts": "Set when the session starts.",
         "availableAfterSessionStarts": "Available after the session starts.",
         "optionUpdateFailed": "Could not update option",
@@ -17304,6 +17308,23 @@
       "conversationCommand": {
         "pendingWork": "Wait for pending work and messages to finish before using this command.",
         "unconfirmed": "Conversation operation was not confirmed."
+      },
+      "permissions": {
+        "unknownLabel": "Unknown",
+        "confirmTitle": "Enable full access?",
+        "confirmDescription": "Allow this chat to run commands without sandbox restrictions or approval, including network access.",
+        "confirm": "Enable full access",
+        "updateFailed": "Could not update permissions",
+        "label": "Permissions",
+        "nextMessage": "Applies to the next message; awaiting confirmation.",
+        "custom": "Custom permissions detected.",
+        "unknown": "Current permissions have not been reported.",
+        "restoring": "Restoring permissions...",
+        "pending": "Selected permissions will be applied to the next message.",
+        "restoreFailed": "Selected permissions are not confirmed.",
+        "selectedAndActive": "Selected: {{desired}}. Active: {{current}}.",
+        "activeForMessages": "Messages use the active permissions.",
+        "retry": "Retry restoration"
       }
     },
     "tab": {

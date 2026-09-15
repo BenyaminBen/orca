@@ -6,7 +6,8 @@ import { codexPermissionPolicy } from '../../shared/codex-permissions'
 import {
   observeCodexPermissions,
   readCodexPermissionOptions,
-  selectCodexPermissions
+  selectCodexPermissions,
+  selectedCodexPermissionPolicy
 } from './codex-structured-permissions'
 import { startCodexTurn } from './codex-structured-turn-start'
 import { readNativeSessionOptions } from '../native-chat/agent-session-wire/structured-agent-session-option-restoration'
@@ -73,7 +74,8 @@ describe('structured conversation permissions', () => {
       threadSettings: codexPermissionPolicy('full-access')
     })
     expect(await readCodexPermissionOptions(session)).toMatchObject({ current: 'full-access' })
-    expect(session.options.has('permissions')).toBe(false)
+    expect((await readCodexPermissionOptions(session)).pending).toBeUndefined()
+    expect(session.options.get('permissions')).toBe('full-access')
   })
 
   it('retains the old state after a refused mutation and disables restricted modes', async () => {
@@ -154,7 +156,11 @@ describe('structured conversation permissions', () => {
         permissionState: JSON.stringify(codexPermissionPolicy('full-access'))
       }
     })
-    expect(options).toEqual({ model: 'model', permissionState: JSON.stringify(policy) })
+    expect(options).toEqual({
+      model: 'model',
+      permissions: 'full-access',
+      permissionState: JSON.stringify(policy)
+    })
     const request = vi.fn(async () => ({
       thread: { id: 'new-thread' },
       model: 'model',
@@ -176,5 +182,56 @@ describe('structured conversation permissions', () => {
       }),
       { timeoutMs: undefined }
     )
+  })
+
+  it('keeps the latest desired policy through delayed reports and failed turns', async () => {
+    const { session, request } = sessionFixture()
+    await selectCodexPermissions(session, 'full-access')
+    observeCodexPermissions(session, {
+      threadId: session.threadId,
+      threadSettings: codexPermissionPolicy('ask-for-approval')
+    })
+    expect(selectedCodexPermissionPolicy(session.options)).toEqual(
+      codexPermissionPolicy('full-access')
+    )
+    expect(await readCodexPermissionOptions(session)).toMatchObject({
+      current: 'ask-for-approval',
+      pending: 'full-access'
+    })
+    observeCodexPermissions(session, {
+      threadId: session.threadId,
+      threadSettings: codexPermissionPolicy('full-access')
+    })
+    await selectCodexPermissions(session, 'approve-for-me')
+    observeCodexPermissions(session, {
+      threadId: session.threadId,
+      threadSettings: codexPermissionPolicy('full-access')
+    })
+    request.mockRejectedValueOnce(new Error('transport unavailable'))
+    const turn = {
+      clientMessageId: 'retry',
+      body: {
+        kind: 'message' as const,
+        role: 'user' as const,
+        blocks: [{ type: 'text' as const, text: 'fixture' }]
+      }
+    }
+    await expect(startCodexTurn(session, turn)).rejects.toThrow('transport unavailable')
+    await startCodexTurn(session, turn)
+    expect(request.mock.calls.at(-1)?.[1]).toMatchObject(codexPermissionPolicy('approve-for-me'))
+    const options = await readNativeSessionOptions({
+      adapter: {
+        readOptions: async () => ({
+          models: [],
+          current: { model: 'model' },
+          permissions: await readCodexPermissionOptions(session)
+        })
+      },
+      sessionId: 'session',
+      fence: 1,
+      priorOptions: Object.fromEntries(session.options)
+    })
+    expect(options?.permissions).toBe('approve-for-me')
+    expect(options?.permissionState).toBe(JSON.stringify(codexPermissionPolicy('full-access')))
   })
 })

@@ -77,23 +77,6 @@ export function createStructuredAgentSessionHostHandoff(
       if (!deps.adapter.closeSession) {
         return { state: 'live' }
       }
-      const record = deps.store.getRecord(sessionId)
-      if (record?.provider === 'codex') {
-        const options = await readNativeSessionOptions({
-          adapter: deps.adapter,
-          sessionId,
-          fence: record.lease.runtimeFence,
-          priorOptions: record.options
-        })
-        if (options) {
-          await deps.store.replaceSessionOptions({
-            sessionId,
-            fence: record.lease.runtimeFence,
-            options,
-            now: host.now()
-          })
-        }
-      }
       const exited = await deps.adapter.closeSession(sessionId)
       if (exited !== true) {
         // Report the unproven exit; the forward handoff refuses on it.

@@ -96,7 +96,6 @@ export class OrcaRuntimeWithGetAgentSessionExecutionNamespace extends OrcaRuntim
       providerRoot: string
       sessionId: string
       launchArgs?: AgentSessionLaunchArgs
-      options?: Readonly<Record<string, string>>
     }
   ): Promise<RuntimeEnsureAgentSessionResult> {
     if (request.kind === 'automatic') {
@@ -158,8 +157,7 @@ export class OrcaRuntimeWithGetAgentSessionExecutionNamespace extends OrcaRuntim
             : {})
       },
       ompResumeFilePath: request.ompResumeFilePath,
-      sessionOptions:
-        handoffAuthority?.options ?? this.toAgentSessionOptions(request.launchPreferences),
+      sessionOptions: this.toAgentSessionOptions(request.launchPreferences),
       sessionOptionsOverrideAgentArgs: Boolean(request.launchPreferences),
       platform,
       shell,

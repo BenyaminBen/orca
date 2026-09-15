@@ -4,11 +4,41 @@ import { buildNativeChatSessionOptionSnapshot } from './native-chat-session-opti
 import { createNativeChatSessionOptionRecord } from './native-chat-session-option-state'
 import {
   applyStructuredAgentSessionOptions,
+  commitStructuredAgentSessionOptionValues,
   createStructuredAgentSessionOptionState,
   structuredAgentSessionOptionSnapshot
 } from './structured-agent-session-options'
+import { codexPermissionPolicy } from './codex-permissions'
 
 describe('structured agent session options', () => {
+  it('retains failed restoration when another option mutation returns the full native option record', () => {
+    const recovery = {
+      desired: 'full-access' as const,
+      effective: codexPermissionPolicy('ask-for-approval')
+    }
+    const state = {
+      ...createStructuredAgentSessionOptionState('codex'),
+      permissions: {
+        current: 'ask-for-approval' as const,
+        desired: 'full-access' as const,
+        restoration: 'failed' as const,
+        recovery,
+        choices: []
+      }
+    }
+    const next = commitStructuredAgentSessionOptionValues(state, {
+      model: 'model',
+      permissions: 'full-access',
+      permissionRecovery: JSON.stringify(recovery)
+    })
+    expect(next.permissions).toMatchObject({
+      desired: 'full-access',
+      current: 'ask-for-approval',
+      restoration: 'failed',
+      recovery
+    })
+    expect(next.permissions?.pending).toBeUndefined()
+  })
   it('projects native Codex selects while bridge Codex keeps its agent picker', () => {
     const state = applyStructuredAgentSessionOptions(
       createStructuredAgentSessionOptionState('codex'),

@@ -20,6 +20,7 @@ import type { AgentSessionOptionsResult } from './agent-session-wire'
 import { nativeChatPermissionOption } from './native-chat-permission-option'
 import {
   isCodexPermissionMode,
+  decodeCodexPermissionRecovery,
   unavailableCodexPermissionOptions,
   type CodexPermissionOptions
 } from './codex-permissions'
@@ -165,8 +166,18 @@ export function structuredAgentSessionOptionSnapshot(
 export function canSetStructuredAgentSessionOption(
   state: StructuredAgentSessionOptionState,
   id: string,
-  value: SessionOptionValue
+  value: SessionOptionValue,
+  retryPermissions = false
 ): boolean {
+  if (retryPermissions) {
+    return Boolean(
+      state.catalog &&
+      state.pendingId === null &&
+      id === 'permissions' &&
+      state.permissions?.restoration === 'failed' &&
+      state.permissions.desired === value
+    )
+  }
   const descriptor = structuredAgentSessionOptionSnapshot(state).find((entry) => entry.id === id)
   return Boolean(
     state.catalog &&
@@ -204,9 +215,22 @@ export function commitStructuredAgentSessionOptionValues(
   state: StructuredAgentSessionOptionState,
   values: Readonly<Record<string, string>>
 ): StructuredAgentSessionOptionState {
+  const recovery = decodeCodexPermissionRecovery(values.permissionRecovery, values.permissions)
   let next =
     state.permissions && isCodexPermissionMode(values.permissions)
-      ? { ...state, permissions: { ...state.permissions, pending: values.permissions } }
+      ? {
+          ...state,
+          permissions: {
+            ...state.permissions,
+            desired: values.permissions,
+            pending:
+              recovery || values.permissions === state.permissions.current
+                ? undefined
+                : values.permissions,
+            restoration: recovery ? ('failed' as const) : undefined,
+            recovery
+          }
+        }
       : state
   for (const id of STRUCTURED_LAUNCH_SEED_OPTION_IDS) {
     const value = values[id]

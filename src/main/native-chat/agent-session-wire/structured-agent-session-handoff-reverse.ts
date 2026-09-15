@@ -38,22 +38,6 @@ export async function handoffStructuredSessionToNative(
           await deps.persistTuiProviderHandle?.({ sessionId, link: owner.link, now: deps.now() })
         }
       }
-      if (record.provider === 'codex' && deps.transport?.readTuiPermissions) {
-        const policy = await deps.transport.readTuiPermissions(owner, { exited: tuiAlreadyExited })
-        const options: Record<string, string> = {
-          ...record.options,
-          permissionState: JSON.stringify(policy)
-        }
-        delete options.permissions
-        delete options.approvalPolicy
-        delete options.approvalsReviewer
-        record = await deps.store.replaceSessionOptions({
-          sessionId,
-          fence: record.lease.runtimeFence,
-          options,
-          now: deps.now()
-        })
-      }
       transcriptPath = owner.transcriptPath ?? transcriptPath
       if (owner.link.handle.provider === 'codex' && !transcriptPath) {
         throw new Error(

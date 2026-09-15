@@ -8,6 +8,7 @@ import type {
 } from '../../../../shared/native-chat-session-options'
 import { NativeChatSessionOptionPickers } from './NativeChatSessionOptionPickers'
 import { NativeChatPermissionPicker } from './NativeChatPermissionPicker'
+import { NativeChatPermissionRecovery } from './NativeChatPermissionRecovery'
 import type { NativeChatOptionPickerRequest } from './native-chat-composer-types'
 
 export type NativeChatComposerActionsProps = {
@@ -64,108 +65,117 @@ export function NativeChatComposerActions({
     ? translate('components.native-chat.composer.stopDictation', 'Stop dictation')
     : translate('components.native-chat.composer.startDictation', 'Start dictation')
   return (
-    <div className="flex w-full items-center justify-between gap-2">
-      <div className="flex min-w-0 items-center gap-0.5">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={translate('components.native-chat.composer.attach', 'Attach file')}
-              disabled={attachDisabled}
-              onClick={onAttach}
-              className="pointer-coarse:size-11"
-            >
-              <Plus className="size-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top" sideOffset={4}>
-            {translate('components.native-chat.composer.attach', 'Attach file')}
-          </TooltipContent>
-        </Tooltip>
-        {sessionOptionsSurface && permissionOption ? (
-          <NativeChatPermissionPicker
-            surface={sessionOptionsSurface}
-            descriptor={permissionOption}
-            isWorking={isWorking}
-          />
-        ) : null}
-      </div>
-      <div className="ml-auto flex items-center gap-1.5">
-        {/* Why: keep session controls beside the actions they affect; the
+    <div className="flex w-full flex-col gap-2">
+      <div className="flex w-full items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-0.5">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={translate('components.native-chat.composer.attach', 'Attach file')}
+                disabled={attachDisabled}
+                onClick={onAttach}
+                className="pointer-coarse:size-11"
+              >
+                <Plus className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top" sideOffset={4}>
+              {translate('components.native-chat.composer.attach', 'Attach file')}
+            </TooltipContent>
+          </Tooltip>
+          {sessionOptionsSurface && permissionOption ? (
+            <NativeChatPermissionPicker
+              surface={sessionOptionsSurface}
+              descriptor={permissionOption}
+              isWorking={isWorking}
+            />
+          ) : null}
+        </div>
+        <div className="ml-auto flex items-center gap-1.5">
+          {/* Why: keep session controls beside the actions they affect; the
         model trigger is ordered last so it sits directly next to dictation. */}
-        <NativeChatSessionOptionPickers
-          surface={sessionOptionsSurface}
-          snapshot={sessionOptionsSnapshot}
-          isWorking={isWorking}
-          pickerRequest={sessionOptionsPickerRequest}
-        />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant={isDictating ? 'secondary' : 'ghost'}
-              size="icon-sm"
-              aria-label={dictationLabel}
-              disabled={dictationDisabled}
-              onClick={isDictationHoldMode ? undefined : onDictationToggle}
-              onPointerDown={(event) => {
-                if (!isDictationHoldMode || dictationDisabled) {
-                  return
-                }
-                event.preventDefault()
-                onDictationHoldStart()
-              }}
-              onPointerUp={() => {
-                if (isDictationHoldMode && !dictationDisabled) {
-                  onDictationHoldEnd()
-                }
-              }}
-              onPointerCancel={() => {
-                if (isDictationHoldMode && !dictationDisabled) {
-                  onDictationHoldEnd()
-                }
-              }}
-              onPointerLeave={(event) => {
-                if (isDictationHoldMode && event.buttons === 1 && !dictationDisabled) {
-                  onDictationHoldEnd()
-                }
-              }}
-              className="pointer-coarse:size-11"
-            >
-              {isDictating ? (
-                <Square className="size-3.5 fill-current" />
-              ) : (
-                <Mic className="size-4" />
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top" sideOffset={4}>
-            {dictationLabel}
-          </TooltipContent>
-        </Tooltip>
-        <Button
-          type="button"
-          data-native-chat-critical-action={isWorking ? 'stop' : undefined}
-          aria-label={
-            isWorking
-              ? translate('components.native-chat.stop', 'Stop the agent')
-              : translate('components.native-chat.composer.send', 'Send')
-          }
-          disabled={sendDisabled}
-          onClick={handleCriticalAction}
-          variant={isWorking ? 'secondary' : 'default'}
-          size="icon"
-          className="size-8 rounded-full pointer-coarse:size-10"
-        >
-          {isWorking ? (
-            <Square className="size-3.5 fill-current" />
-          ) : (
-            <ArrowUp className="size-4" />
-          )}
-        </Button>
+          <NativeChatSessionOptionPickers
+            surface={sessionOptionsSurface}
+            snapshot={sessionOptionsSnapshot}
+            isWorking={isWorking}
+            pickerRequest={sessionOptionsPickerRequest}
+          />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant={isDictating ? 'secondary' : 'ghost'}
+                size="icon-sm"
+                aria-label={dictationLabel}
+                disabled={dictationDisabled}
+                onClick={isDictationHoldMode ? undefined : onDictationToggle}
+                onPointerDown={(event) => {
+                  if (!isDictationHoldMode || dictationDisabled) {
+                    return
+                  }
+                  event.preventDefault()
+                  onDictationHoldStart()
+                }}
+                onPointerUp={() => {
+                  if (isDictationHoldMode && !dictationDisabled) {
+                    onDictationHoldEnd()
+                  }
+                }}
+                onPointerCancel={() => {
+                  if (isDictationHoldMode && !dictationDisabled) {
+                    onDictationHoldEnd()
+                  }
+                }}
+                onPointerLeave={(event) => {
+                  if (isDictationHoldMode && event.buttons === 1 && !dictationDisabled) {
+                    onDictationHoldEnd()
+                  }
+                }}
+                className="pointer-coarse:size-11"
+              >
+                {isDictating ? (
+                  <Square className="size-3.5 fill-current" />
+                ) : (
+                  <Mic className="size-4" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top" sideOffset={4}>
+              {dictationLabel}
+            </TooltipContent>
+          </Tooltip>
+          <Button
+            type="button"
+            data-native-chat-critical-action={isWorking ? 'stop' : undefined}
+            aria-label={
+              isWorking
+                ? translate('components.native-chat.stop', 'Stop the agent')
+                : translate('components.native-chat.composer.send', 'Send')
+            }
+            disabled={sendDisabled}
+            onClick={handleCriticalAction}
+            variant={isWorking ? 'secondary' : 'default'}
+            size="icon"
+            className="size-8 rounded-full pointer-coarse:size-10"
+          >
+            {isWorking ? (
+              <Square className="size-3.5 fill-current" />
+            ) : (
+              <ArrowUp className="size-4" />
+            )}
+          </Button>
+        </div>
       </div>
+      {sessionOptionsSurface && permissionOption ? (
+        <NativeChatPermissionRecovery
+          surface={sessionOptionsSurface}
+          descriptor={permissionOption}
+          isWorking={isWorking}
+        />
+      ) : null}
     </div>
   )
 }

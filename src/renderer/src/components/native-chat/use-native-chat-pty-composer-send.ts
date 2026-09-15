@@ -18,8 +18,6 @@ import { isSlashCommandDraft } from '../../../../shared/native-chat-slash-comman
 import type { NativeChatPickerState } from './use-native-chat-picker-state'
 import type { NativeChatSendLifecycle } from './use-native-chat-send-lifecycle'
 import type { NativeChatPtySessionOptionsSurface } from './native-chat-pty-session-options'
-import type { NativeChatSessionOptionDispatchCommand } from './native-chat-session-option-command-dispatch'
-import { unavailableCodexPermissionOptions } from '../../../../shared/codex-permissions'
 
 export function useNativeChatPtyComposerSend(args: {
   agent: AgentType
@@ -27,7 +25,6 @@ export function useNativeChatPtyComposerSend(args: {
   imageAttachments: readonly { path: string }[]
   disabled: boolean
   isDispatchingSessionOption: boolean
-  dispatchSessionOptionCommand?: NativeChatSessionOptionDispatchCommand
   launchDraft?: NativeChatLaunchDraft | null
   launchDraftResolved: boolean
   readTerminalScreen?: () => string | null
@@ -60,34 +57,6 @@ export function useNativeChatPtyComposerSend(args: {
       return
     }
     const classification = args.classifySend(text)
-    if (
-      args.agent === 'codex' &&
-      text.trim() === '/clear' &&
-      imagePaths.length === 0 &&
-      args.dispatchSessionOptionCommand
-    ) {
-      void Promise.resolve(
-        args.dispatchSessionOptionCommand('/clear', { permissions: 'preserve-on-clear' })
-      )
-        .then((result) => {
-          if (result?.permissions) {
-            args.sessionOptionsSurface?.reportPermissions(result.permissions)
-          }
-          args.onSlashCommand?.('/clear')
-          args.sessionOptionsSurface?.recordOutgoingCommand('/clear')
-        })
-        .catch((error) => {
-          const message = error instanceof Error ? error.message : String(error)
-          args.sessionOptionsSurface?.reportPermissions(unavailableCodexPermissionOptions(message))
-          args.setNotice(message)
-        })
-      args.setHistory((previous) => pushHistory(previous, text))
-      args.setDraft('')
-      args.setCaret(0)
-      args.clearSkillOrigin()
-      args.setNotice(null)
-      return
-    }
     const { sendOptions } = resolveNativeChatLaunchDraftSend({
       launchDraft: args.launchDraft,
       launchDraftResolved: args.launchDraftResolved,

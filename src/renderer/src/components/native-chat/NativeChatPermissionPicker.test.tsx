@@ -8,6 +8,7 @@ import { CODEX_PERMISSION_MODES } from '../../../../shared/codex-permissions'
 import { nativeChatPermissionOption } from '../../../../shared/native-chat-permission-option'
 import type { SessionOptionsSurface } from '../../../../shared/native-chat-session-options'
 import { NativeChatPermissionPicker } from './NativeChatPermissionPicker'
+import { NativeChatPermissionRecovery } from './NativeChatPermissionRecovery'
 
 const mocks = vi.hoisted(() => ({
   settings: { skipFullAccessConfirm: false },
@@ -26,22 +27,27 @@ vi.mock('@/i18n/i18n', () => ({
 function fixture(
   options: {
     working?: boolean
-    current?: 'ask-for-approval' | 'full-access'
+    current?: 'ask-for-approval' | 'full-access' | 'custom' | null
     confirm?: (options: ConfirmationDialogOptions) => Promise<boolean>
+    recovery?: { desired: 'full-access'; restoration: 'failed' | 'restoring' }
+    pending?: 'full-access'
   } = {}
 ) {
   const descriptor = nativeChatPermissionOption(
     {
-      current: options.current ?? 'ask-for-approval',
-      choices: CODEX_PERMISSION_MODES.map(({ value }) => ({ value }))
+      current: options.current === null ? undefined : (options.current ?? 'ask-for-approval'),
+      choices: CODEX_PERMISSION_MODES.map(({ value }) => ({ value })),
+      ...options.recovery,
+      ...(options.pending ? { pending: options.pending, desired: options.pending } : {})
     },
     'agent-session'
   )
   const setOption = vi.fn(async () => ({ snapshot: [descriptor] }))
+  const invokeAction = vi.fn(async () => ({ snapshot: [descriptor] }))
   const surface: SessionOptionsSurface = {
     getSnapshot: () => [descriptor],
     setOption,
-    invokeAction: async () => ({ snapshot: [descriptor] }),
+    invokeAction,
     subscribe: () => () => {}
   }
   const confirm = vi.fn(options.confirm ?? (async () => true))
@@ -53,10 +59,15 @@ function fixture(
           descriptor={descriptor}
           isWorking={options.working ?? false}
         />
+        <NativeChatPermissionRecovery
+          surface={surface}
+          descriptor={descriptor}
+          isWorking={options.working ?? false}
+        />
       </TooltipProvider>
     </ConfirmationDialogContext.Provider>
   )
-  return { setOption, confirm }
+  return { setOption, confirm, invokeAction }
 }
 
 async function openMenu() {
@@ -76,6 +87,65 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('permission selector', () => {
+  it('lets the user adopt the effective fallback as the new selected mode after recovery failure', async () => {
+    const { setOption } = fixture({
+      current: 'ask-for-approval',
+      recovery: { desired: 'full-access', restoration: 'failed' }
+    })
+    await openMenu()
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /Ask for approval/ }))
+    await waitFor(() => expect(setOption).toHaveBeenCalledWith('permissions', 'ask-for-approval'))
+  })
+  it('visibly distinguishes a structured selection awaiting its next message from active permissions', () => {
+    const { invokeAction } = fixture({ current: 'ask-for-approval', pending: 'full-access' })
+    expect(screen.getByRole('button', { name: 'Permissions Full Access' })).toBeTruthy()
+    const status = screen.getByRole('status')
+    expect(status.textContent).toContain(
+      'Selected permissions will be applied to the next message.'
+    )
+    expect(status.textContent).toContain('Selected: Full Access. Active: Ask for approval.')
+    expect(screen.queryByRole('button', { name: 'Retry restoration' })).toBeNull()
+    expect(invokeAction).not.toHaveBeenCalled()
+  })
+  it.each(['ask-for-approval', null] as const)(
+    'shows selected and effective permissions visibly after failed restoration (%s)',
+    async (current) => {
+      const { confirm, invokeAction } = fixture({
+        current,
+        recovery: { desired: 'full-access', restoration: 'failed' }
+      })
+      const status = screen.getByRole('status')
+      expect(status.textContent).toContain('Selected: Full Access.')
+      expect(status.textContent).toContain(`Active: ${current ? 'Ask for approval' : 'Unknown'}.`)
+      expect(status.textContent).toContain('Messages use the active permissions.')
+      fireEvent.click(screen.getByRole('button', { name: 'Retry restoration' }))
+      await waitFor(() => expect(invokeAction).toHaveBeenCalledWith('permissions'))
+      expect(confirm).not.toHaveBeenCalled()
+    }
+  )
+  it.each([
+    { current: null, label: 'Unknown', message: 'Current permissions have not been reported.' },
+    { current: 'custom', label: 'Custom', message: 'Custom permissions detected.' }
+  ] as const)(
+    'explains $label on hover and allows selecting a preset',
+    async ({ current, label, message }) => {
+      const { setOption } = fixture({ current })
+      const button = screen.getByRole('button', { name: `Permissions ${label}` })
+      fireEvent.pointerMove(button, { pointerType: 'mouse' })
+      expect((await screen.findByRole('tooltip')).textContent).toContain(message)
+      await openMenu()
+      fireEvent.click(screen.getByRole('menuitemradio', { name: /Ask for approval/ }))
+      await waitFor(() => expect(setOption).toHaveBeenCalledWith('permissions', 'ask-for-approval'))
+    }
+  )
+  it('distinguishes unreported permissions from a known custom policy', async () => {
+    fixture({ current: null })
+    expect(screen.getByRole('button', { name: /Permissions Unknown/ })).toBeTruthy()
+    await openMenu()
+    expect(screen.getAllByRole('menuitemradio')).toHaveLength(3)
+    expect(screen.queryByRole('menuitemradio', { name: /Unknown|Custom/ })).toBeNull()
+  })
+
   it('shows the three official modes and emphasizes Full Access without a special color', async () => {
     fixture({ current: 'full-access' })
     const label = screen

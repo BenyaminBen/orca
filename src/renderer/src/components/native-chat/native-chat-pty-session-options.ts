@@ -27,12 +27,6 @@ import {
   type NativeChatSessionOptionMode
 } from './native-chat-session-option-snapshot'
 import type { NativeChatSessionOptionDispatchCommand } from './native-chat-session-option-command-dispatch'
-import {
-  CODEX_PERMISSION_MODES,
-  isCodexPermissionMode,
-  type CodexPermissionOptions
-} from '../../../../shared/codex-permissions'
-import { nativeChatPermissionOption } from '../../../../shared/native-chat-permission-option'
 
 type PersistSelection = (args: {
   modelId: string
@@ -43,7 +37,6 @@ type PersistSelection = (args: {
 }) => Promise<void> | void
 
 export type NativeChatPtySessionOptionsSurface = SessionOptionsSurface & {
-  reportPermissions(permissions: CodexPermissionOptions): void
   recordOutgoingCommand(command: string): void
   reportSessionOptions(values: Record<string, SessionOptionValue>): void
   replaceModels(models: CatalogModel[]): void
@@ -101,31 +94,24 @@ export function createNativeChatPtySessionOptions(
     writeNativeChatSessionOptionCache(args.scopeKey, record)
   }
   const activeModels = (): CatalogModel[] => withTrackedNativeChatModel(catalog, models, record)
-  let permissions: CodexPermissionOptions | undefined =
-    args.agent === 'codex'
-      ? {
-          choices: CODEX_PERMISSION_MODES.map(({ value }) => ({
-            value,
-            disabledReason: 'Waiting for the CLI permission menu.'
-          }))
-        }
-      : undefined
-  const buildSnapshot = (): SessionOptionDescriptor[] => [
-    ...buildNativeChatSessionOptionSnapshot({
+  let snapshot = buildNativeChatSessionOptionSnapshot({
+    catalog,
+    models: activeModels(),
+    record,
+    mode: args.mode,
+    liveTransport: 'catalog'
+  })
+  const listeners = new Set<(value: SessionOptionDescriptor[]) => void>()
+
+  const publish = (): SessionOptionDescriptor[] => {
+    writeNativeChatSessionOptionCache(args.scopeKey, record)
+    snapshot = buildNativeChatSessionOptionSnapshot({
       catalog,
       models: activeModels(),
       record,
       mode: args.mode,
       liveTransport: 'catalog'
-    }),
-    ...(permissions ? [nativeChatPermissionOption(permissions, 'catalog')] : [])
-  ]
-  let snapshot = buildSnapshot()
-  const listeners = new Set<(value: SessionOptionDescriptor[]) => void>()
-
-  const publish = (): SessionOptionDescriptor[] => {
-    writeNativeChatSessionOptionCache(args.scopeKey, record)
-    snapshot = buildSnapshot()
+    })
     for (const listener of listeners) {
       listener(snapshot)
     }
@@ -199,26 +185,7 @@ export function createNativeChatPtySessionOptions(
 
   return {
     getSnapshot: () => snapshot,
-    setOption: async (id, value) => {
-      if (id !== 'permissions') {
-        return appliers.setOption(id, value)
-      }
-      if (!permissions || !isCodexPermissionMode(value)) {
-        throw new Error('Unknown permission mode.')
-      }
-      const result = await args.dispatchCommand('/permissions', { permissions: value })
-      if (!result?.permissions) {
-        throw new Error('The CLI did not report the permission change.')
-      }
-      permissions = result.permissions
-      return { snapshot: publish() }
-    },
-    reportPermissions: (reported) => {
-      if (permissions && JSON.stringify(permissions) !== JSON.stringify(reported)) {
-        permissions = reported
-        publish()
-      }
-    },
+    setOption: appliers.setOption,
     invokeAction: appliers.invokeAction,
     subscribe: (listener) => {
       listeners.add(listener)

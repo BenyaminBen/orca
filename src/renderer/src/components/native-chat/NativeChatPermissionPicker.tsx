@@ -36,12 +36,13 @@ export function NativeChatPermissionPicker(props: {
     return null
   }
   const current = descriptor.kind.currentValue
+  const selected = descriptor.permissionState?.desired ?? current
   const label =
     isCodexPermissionMode(current) || current === 'read-only' || current === 'custom'
       ? codexPermissionLabel(current)
-      : 'Permissions'
+      : translate('components.native-chat.permissions.unknownLabel', 'Unknown')
   const setMode = async (value: string): Promise<void> => {
-    if (inFlight.current || isWorking || !isCodexPermissionMode(value) || value === current) {
+    if (inFlight.current || isWorking || !isCodexPermissionMode(value) || value === selected) {
       return
     }
     inFlight.current = true
@@ -111,18 +112,23 @@ export function NativeChatPermissionPicker(props: {
                 'components.native-chat.permissions.nextMessage',
                 'Applies to the next message; awaiting confirmation.'
               )
-            : descriptor.valueSource === 'unknown'
+            : current === 'custom'
               ? translate(
-                  'components.native-chat.permissions.unknown',
-                  'Current permissions have not been reported.'
+                  'components.native-chat.permissions.custom',
+                  'Custom permissions detected.'
                 )
-              : undefined
+              : descriptor.valueSource === 'unknown'
+                ? translate(
+                    'components.native-chat.permissions.unknown',
+                    'Current permissions have not been reported.'
+                  )
+                : undefined
         }
       />
       <DropdownMenuContent align="start" side="top" collisionPadding={8} className="w-64">
         <DropdownMenuRadioGroup
-          aria-label="Permissions"
-          value={current}
+          aria-label={translate('components.native-chat.permissions.label', 'Permissions')}
+          value={selected}
           onValueChange={(value) => void setMode(value)}
         >
           {descriptor.kind.choices.map((choice) => (

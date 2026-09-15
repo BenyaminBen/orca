@@ -1,4 +1,3 @@
-import type { CodexPermissionPolicy } from '../../../shared/codex-permissions'
 import type { AgentSessionProviderHandleLink } from '../../../shared/agent-session-provider-handle'
 import type {
   AgentSessionProcessIdentity,
@@ -30,10 +29,6 @@ export class StructuredTuiLaunchCleanupError extends Error {
 }
 
 export type StructuredAgentSessionHandoffTransport = {
-  readTuiPermissions?(
-    owner: StructuredTuiOwner,
-    input: { exited: boolean }
-  ): Promise<CodexPermissionPolicy>
   hostLabel: string
   launchTui(input: {
     record: AgentSessionRecord

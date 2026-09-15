@@ -1,4 +1,5 @@
 import type { AgentType } from './agent-status-types'
+import type { CodexPermissionOptions } from './codex-permissions'
 
 export type SessionOptionValue = string | boolean
 
@@ -53,6 +54,7 @@ export type SessionOptionDescriptor = {
   transport: NativeChatLiveOptionTransport
   settable: boolean
   disabledReason?: SessionOptionDisabledReason
+  permissionState?: Pick<CodexPermissionOptions, 'current' | 'desired' | 'restoration'>
   /** Why: picker-only and toggle-only PTY commands cannot be represented as
    * a truthful radio/checkbox state, so the producer exposes an action row. */
   action?: { type: 'agent-picker' | 'toggle-command' }

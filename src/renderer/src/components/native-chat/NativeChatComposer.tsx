@@ -11,6 +11,7 @@ import {
 import { useNativeChatDraft } from './use-native-chat-draft'
 import { useNativeChatLaunchDraftAdoption } from './use-native-chat-launch-draft-adoption'
 import { NativeChatComposerField } from './NativeChatComposerField'
+import type { NativeChatResolvedTarget } from './native-chat-composer-target'
 import { useNativeChatComposerAttachments } from './use-native-chat-composer-attachments'
 import { useNativeChatComposerPaste } from './use-native-chat-composer-paste'
 import { useNativeChatExternalAttachments } from './use-native-chat-external-attachments'
@@ -38,6 +39,12 @@ export type {
   NativeChatComposerHandle,
   NativeChatComposerProps
 } from './native-chat-composer-types'
+
+// Why: a plain ESC byte is what the agent TUIs read as the interrupt key over a
+// PTY (matching how xterm forwards Escape). The richer interrupt-intent
+// inference (agent-interrupt-intent.ts) is driven by the existing PTY input
+// observers, so writing ESC through the same send path feeds that machinery.
+const ESC = '\x1b'
 
 /**
  * Rich native input for the chat view. Sends prompts into the running agent
@@ -67,7 +74,10 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
     },
     ref
   ): React.JSX.Element {
-    // Pane identity preserves unsent input across view changes and PTY replacement.
+    // Scope key shared with image attachments so an unsent draft + its attached
+    // images survive both TUI/GUI toggles and PTY replacement on reconnect.
+    // Why: local, SSH, and runtime reconnects can replace or temporarily clear
+    // the PTY id. Pane identity is the stable ownership key for unsent input.
     const { draft, setDraft } = useNativeChatDraft(paneKey)
     const [caret, setCaret] = useState(draft.length)
     useNativeChatLaunchDraftAdoption({
@@ -128,10 +138,11 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
 
     // Resolve the live ptyId for this chat leaf; runtime owner settings route
     // local vs remote (SSH) sends.
-    const resolveTarget = useCallback(() => {
-      return targetPtyId
-        ? { ptyId: targetPtyId, settings: getSettingsForAgentTabRuntimeOwner(terminalTabId) }
-        : null
+    const resolveTarget = useCallback((): NativeChatResolvedTarget | null => {
+      if (!targetPtyId) {
+        return null
+      }
+      return { ptyId: targetPtyId, settings: getSettingsForAgentTabRuntimeOwner(terminalTabId) }
     }, [targetPtyId, terminalTabId])
 
     const [hasPty, disabled] = structuredTransport
@@ -221,8 +232,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
     const { dispatch: dispatchSessionOptionCommand, isDispatching: isDispatchingSessionOption } =
       useNativeChatSessionOptionCommand({
         agent,
-        disabled: disabled || isWorking,
-        readTerminalScreen,
+        disabled,
         onSlashCommand,
         resolveTarget,
         setHistory
@@ -235,7 +245,6 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
         targetPtyId,
         dispatchCommand: dispatchSessionOptionCommand,
         onAgentPicker: onSwitchToTerminal,
-        permissionsDisabled: disabled || isWorking || !!structuredTransport,
         readTerminalScreen
       })
     const sessionOptionsSurface = structuredTransport?.optionsSurface ?? ptySessionOptionsSurface
@@ -254,7 +263,6 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
     })
 
     const sendPty = useNativeChatPtyComposerSend({
-      dispatchSessionOptionCommand,
       agent,
       draft,
       imageAttachments,
@@ -306,7 +314,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
       if (!target) {
         return
       }
-      sendRuntimePtyInput(target.settings, target.ptyId, '\x1b')
+      sendRuntimePtyInput(target.settings, target.ptyId, ESC)
     }, [cancelPendingSends, isWorking, onStop, resolveTarget])
 
     const dispatchPtyPickerCommand = useNativeChatPickerCommandDispatch({

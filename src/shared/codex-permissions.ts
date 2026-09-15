@@ -25,12 +25,20 @@ export type CodexPermissionPolicy = {
   sandboxPolicy: Record<string, unknown> & { type: string }
 }
 
+export type CodexPermissionRecovery = {
+  desired: CodexPermissionMode
+  effective: CodexPermissionPolicy
+}
+
 export type CodexPermissionOptions = {
   /** Absent is unknown; a pending selection is never evidence of effective state. */
   current?: CodexPermissionLabel
   pending?: CodexPermissionMode
+  desired?: CodexPermissionMode
+  restoration?: 'restoring' | 'failed'
+  recovery?: CodexPermissionRecovery
   policy?: CodexPermissionPolicy
-  choices: { value: CodexPermissionMode; disabledReason?: string }[]
+  choices: { value: CodexPermissionMode; disabledReason?: string; restrictedByHost?: true }[]
 }
 
 export function unavailableCodexPermissionOptions(reason: string): CodexPermissionOptions {
@@ -72,6 +80,22 @@ export function decodeCodexPermissionPolicy(
 ): CodexPermissionPolicy | undefined {
   try {
     return value ? readCodexPermissionPolicy(JSON.parse(value)) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+export function decodeCodexPermissionRecovery(
+  value: string | undefined,
+  desired: string | undefined
+): CodexPermissionRecovery | undefined {
+  try {
+    const parsed: unknown = value ? JSON.parse(value) : undefined
+    if (!record(parsed) || !isCodexPermissionMode(parsed.desired) || parsed.desired !== desired) {
+      return undefined
+    }
+    const effective = readCodexPermissionPolicy(parsed.effective)
+    return effective ? { desired: parsed.desired, effective } : undefined
   } catch {
     return undefined
   }
@@ -127,6 +151,6 @@ export function classifyCodexPermissions(policy: CodexPermissionPolicy): CodexPe
 export function codexPermissionLabel(value: CodexPermissionLabel | undefined): string {
   return (
     CODEX_PERMISSION_MODES.find((mode) => mode.value === value)?.label ??
-    (value === 'read-only' ? 'Read-only' : value === 'custom' ? 'Custom' : 'Permissions')
+    (value === 'read-only' ? 'Read-only' : value === 'custom' ? 'Custom' : 'Unknown')
   )
 }

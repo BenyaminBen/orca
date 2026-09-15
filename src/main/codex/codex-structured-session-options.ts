@@ -7,7 +7,11 @@ import { decodeStructuredAgentSessionOptionValue } from '../../shared/structured
 import { decodeCodexFastMode, reconcileCodexFastModeOption } from './codex-structured-fast-mode'
 import { readCodexStructuredSessionOptionCatalog } from './codex-structured-model-catalog'
 import { readCodexPermissionOptions, selectCodexPermissions } from './codex-structured-permissions'
-import { decodeCodexPermissionPolicy, isCodexPermissionMode } from '../../shared/codex-permissions'
+import {
+  decodeCodexPermissionPolicy,
+  decodeCodexPermissionRecovery,
+  isCodexPermissionMode
+} from '../../shared/codex-permissions'
 
 export function restoredCodexSessionOptions(
   options: Readonly<Record<string, string>> | undefined
@@ -16,7 +20,9 @@ export function restoredCodexSessionOptions(
     Object.entries(options ?? {}).filter(([key, value]) => {
       return (
         (isCodexTurnOptionKey(key) ||
-          (key === 'permissionState' && !!decodeCodexPermissionPolicy(value))) &&
+          (key === 'permissionState' && !!decodeCodexPermissionPolicy(value)) ||
+          (key === 'permissionRecovery' &&
+            !!decodeCodexPermissionRecovery(value, options?.permissions))) &&
         (key !== 'permissions' || isCodexPermissionMode(value)) &&
         (key !== 'fastMode' ||
           typeof decodeStructuredAgentSessionOptionValue('fastMode', value) === 'boolean')
