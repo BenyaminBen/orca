@@ -12,9 +12,10 @@ import {
   useLocalImageSrc,
   releaseLocalImageSrc
 } from '@/components/editor/useLocalImageSrc'
-import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client'
 import { isNativeChatPastedImagePath } from './native-chat-image-paste'
 import { useNativeChatImageActions } from './use-native-chat-image-actions'
+import type { NativeChatImageRuntimeContext } from './native-chat-image-runtime-context'
+import { resolveNativeChatImageDestination } from './native-chat-image-destination'
 import { filesystemPathToFileUri } from '../../../../shared/file-uri-path'
 import { isWindowsAbsolutePathLike } from '../../../../shared/cross-platform-path'
 
@@ -56,29 +57,34 @@ function renderableImageSource(source: string | undefined): boolean {
 
 function transcriptImageFilePath(
   block: Extract<NativeChatBlock, { type: 'image-ref' }>,
-  runtimeContext: RuntimeFileOperationArgs | null | undefined
+  runtimeContext: NativeChatImageRuntimeContext | undefined
 ): string | null {
+  let absolutePath: string | null
   if (block.url?.trim()) {
-    return resolveImageAbsolutePath(
+    absolutePath = resolveImageAbsolutePath(
       block.url.trim(),
       joinPath(runtimeContext?.worktreePath ?? '', 'image')
     )
-  }
-  if (!block.path) {
+  } else if (!block.path) {
     return null
+  } else if (block.path.startsWith('/') || isWindowsAbsolutePathLike(block.path)) {
+    absolutePath = block.path
+  } else {
+    absolutePath = runtimeContext?.worktreePath
+      ? joinPath(runtimeContext.worktreePath, block.path)
+      : null
   }
-  if (block.path.startsWith('/') || isWindowsAbsolutePathLike(block.path)) {
-    return block.path
-  }
-  return runtimeContext?.worktreePath ? joinPath(runtimeContext.worktreePath, block.path) : null
+  return absolutePath && runtimeContext
+    ? resolveNativeChatImageDestination(absolutePath, runtimeContext)
+    : absolutePath
 }
 
 function transcriptImageIdentity(
   block: Extract<NativeChatBlock, { type: 'image-ref' }>,
-  runtimeContext: RuntimeFileOperationArgs | null | undefined
+  runtimeContext: NativeChatImageRuntimeContext | undefined
 ): string {
   const source = block.url?.trim() || block.path
-  const filePath = block.path ?? source ?? ''
+  const filePath = transcriptImageFilePath(block, runtimeContext) ?? ''
   if (renderableImageSource(source)) {
     return `external\0${source ?? ''}`
   }
@@ -87,7 +93,7 @@ function transcriptImageIdentity(
       ? 'unresolved'
       : runtimeContext === undefined
         ? 'pending'
-        : getLocalImageCacheKey(source ?? '', runtimeContext.connectionId, runtimeContext)
+        : getLocalImageCacheKey(filePath, runtimeContext.connectionId, runtimeContext)
   }`
 }
 
@@ -97,7 +103,7 @@ function TranscriptImagePreview({
   compact
 }: {
   block: Extract<NativeChatBlock, { type: 'image-ref' }>
-  runtimeContext: RuntimeFileOperationArgs | null | undefined
+  runtimeContext: NativeChatImageRuntimeContext | undefined
   compact: boolean
 }): React.JSX.Element {
   const [near, setNear] = useState(false)
@@ -230,7 +236,7 @@ export function NativeChatImageAttachments({
   enablePreview = runtimeContext !== undefined
 }: {
   blocks: NativeChatBlock[]
-  runtimeContext?: RuntimeFileOperationArgs | null
+  runtimeContext?: NativeChatImageRuntimeContext
   compact?: boolean
   /** Keep legacy terminal chips unchanged until that lane opts into previews. */
   enablePreview?: boolean

@@ -1,6 +1,5 @@
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
-import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client'
 import {
   settingsForWorktreeOperationRoute,
   resolveWorktreeOperationRouteResult
@@ -15,13 +14,19 @@ import {
 import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
+import { resolvePaneWslDistro } from '@/components/terminal-pane/terminal-pane-wsl-distro'
+import {
+  isClientLocalChatImage,
+  type NativeChatImageFileContext
+} from './native-chat-image-destination'
 
 /** The transcript must not read until ownership and its path are both known. */
-export type NativeChatImageRuntimeContext = RuntimeFileOperationArgs | null
+export type NativeChatImageRuntimeContext = NativeChatImageFileContext | null
 
 type OwnerState = Pick<
   AppState,
   | 'settings'
+  | 'projects'
   | 'repos'
   | 'worktreesByRepo'
   | 'detectedWorktreesByRepo'
@@ -32,6 +37,7 @@ type OwnerState = Pick<
   | 'removedRuntimeEnvironmentIds'
   | 'sshConnectionStates'
   | 'sshStateByEnvironment'
+  | 'activeRepoId'
   | 'activeWorktreeId'
   | 'activeWorkspaceExecutionHostId'
   | 'restoredRuntimeHostIdByWorkspaceSessionKey'
@@ -45,6 +51,7 @@ type OwnerState = Pick<
 export function selectNativeChatImageOwnerState(state: AppState): OwnerState {
   return {
     settings: state.settings,
+    projects: state.projects,
     repos: state.repos,
     worktreesByRepo: state.worktreesByRepo,
     detectedWorktreesByRepo: state.detectedWorktreesByRepo,
@@ -55,6 +62,7 @@ export function selectNativeChatImageOwnerState(state: AppState): OwnerState {
     removedRuntimeEnvironmentIds: state.removedRuntimeEnvironmentIds,
     sshConnectionStates: state.sshConnectionStates,
     sshStateByEnvironment: state.sshStateByEnvironment,
+    activeRepoId: state.activeRepoId,
     activeWorktreeId: state.activeWorktreeId,
     activeWorkspaceExecutionHostId: state.activeWorkspaceExecutionHostId,
     restoredRuntimeHostIdByWorkspaceSessionKey: state.restoredRuntimeHostIdByWorkspaceSessionKey,
@@ -152,7 +160,7 @@ export function resolveNativeChatImageRuntimeContext(
   if (!host) {
     return null
   }
-  const context: RuntimeFileOperationArgs = {
+  const context: NativeChatImageFileContext = {
     settings: stableSettingsForRoute(state.settings, route.runtimeEnvironmentId),
     worktreeId: linkContext.worktreeId,
     worktreePath,
@@ -174,6 +182,9 @@ export function resolveNativeChatImageRuntimeContext(
     } catch {
       return null
     }
+  }
+  if (isClientLocalChatImage(context)) {
+    context.localWslDistro = resolvePaneWslDistro(state, linkContext.worktreeId, worktreePath)
   }
   return context
 }

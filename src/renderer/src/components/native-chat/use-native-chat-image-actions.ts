@@ -7,7 +7,8 @@ import {
   type LinkActionRequest
 } from '@/components/link-actions/link-action-request'
 import { isTerminalLinkDirectActivation } from '@/components/terminal-pane/terminal-link-activation'
-import { isClientLocalChatImage, openChatImageWithDefaultApp } from './native-chat-image-open'
+import { openChatImageWithDefaultApp } from './native-chat-image-open'
+import { isClientLocalChatImage } from './native-chat-image-destination'
 import { NativeChatImageScopeContext } from './native-chat-image-scope'
 
 export function useNativeChatImageActions({

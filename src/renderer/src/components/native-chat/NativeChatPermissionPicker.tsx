@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { useConfirmationDialog } from '@/components/confirmation-dialog-context'
 import { persistConfirmationSkipPreference } from '@/components/confirmation-skip-preference'
@@ -29,8 +29,15 @@ export function NativeChatPermissionPicker(props: {
   const openSettingsTarget = useAppStore((state) => state.openSettingsTarget)
   const [pending, setPending] = useState(false)
   const inFlight = useRef(false)
+  const mounted = useRef(false)
   const latest = useRef(props)
   latest.current = props
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
   const { descriptor, surface, isWorking } = props
   if (descriptor.kind.type !== 'select') {
     return null
@@ -45,6 +52,7 @@ export function NativeChatPermissionPicker(props: {
     if (inFlight.current || isWorking || !isCodexPermissionMode(value) || value === selected) {
       return
     }
+    const capturedOwner = surface.scopeIdentity ?? surface
     inFlight.current = true
     setPending(true)
     try {
@@ -77,25 +85,36 @@ export function NativeChatPermissionPicker(props: {
           return
         }
       }
-      if (latest.current.surface !== surface || latest.current.isWorking) {
+      if (!mounted.current) {
+        return
+      }
+      const currentProps = latest.current
+      if (
+        (currentProps.surface.scopeIdentity ?? currentProps.surface) !== capturedOwner ||
+        currentProps.isWorking
+      ) {
         throw new Error(
           'The chat changed while the confirmation was open. Try again when it is idle.'
         )
       }
-      await surface.setOption('permissions', value)
+      await currentProps.surface.setOption('permissions', value)
     } catch (error) {
-      toast.error(
-        translate(
-          'components.native-chat.permissions.updateFailed',
-          'Could not update permissions'
-        ),
-        {
-          description: error instanceof Error ? error.message : String(error)
-        }
-      )
+      if (mounted.current) {
+        toast.error(
+          translate(
+            'components.native-chat.permissions.updateFailed',
+            'Could not update permissions'
+          ),
+          {
+            description: error instanceof Error ? error.message : String(error)
+          }
+        )
+      }
     } finally {
       inFlight.current = false
-      setPending(false)
+      if (mounted.current) {
+        setPending(false)
+      }
     }
   }
   return (

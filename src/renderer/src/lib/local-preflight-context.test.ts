@@ -525,6 +525,68 @@ describe('local preflight context', () => {
     })
   })
 
+  it('uses a detected-only worktree owner before an unrelated active project', () => {
+    const state = makeState({
+      repoPath: String.raw`C:\owner`,
+      worktreePath: String.raw`C:\owner\retained`,
+      worktree: { projectId: 'project-1' }
+    })
+    const retainedWorktree = state.worktreesByRepo['repo-1'][0]
+    state.worktreesByRepo = {}
+    state.detectedWorktreesByRepo = {
+      'repo-1': {
+        repoId: 'repo-1',
+        authoritative: true,
+        source: 'git',
+        worktrees: [
+          {
+            ...retainedWorktree,
+            ownership: 'external',
+            selectedCheckout: false,
+            visible: false
+          }
+        ]
+      }
+    }
+    state.activeRepoId = 'repo-2'
+    state.repos = [
+      ...state.repos,
+      {
+        id: 'repo-2',
+        path: String.raw`C:\active`,
+        displayName: 'Active repo',
+        badgeColor: 'blue',
+        addedAt: 1
+      }
+    ]
+    state.projects = [
+      {
+        id: 'project-1',
+        displayName: 'Owner project',
+        badgeColor: 'blue',
+        sourceRepoIds: ['repo-1'],
+        localWindowsRuntimePreference: { kind: 'wsl', distro: 'Ubuntu' },
+        createdAt: 1,
+        updatedAt: 1
+      },
+      {
+        id: 'project-2',
+        displayName: 'Active project',
+        badgeColor: 'blue',
+        sourceRepoIds: ['repo-2'],
+        localWindowsRuntimePreference: { kind: 'wsl', distro: 'Debian' },
+        createdAt: 1,
+        updatedAt: 1
+      }
+    ]
+
+    expect(
+      getLocalProjectExecutionRuntimeContext(state, retainedWorktree.id, 'win32')
+    ).toMatchObject({
+      runtime: { kind: 'wsl', distro: 'Ubuntu', projectId: 'project-1' }
+    })
+  })
+
   it('resolves WSL UNC worktrees to their owning distro when the project inherits host default', () => {
     const state = makeState({
       repoPath: 'C:\\Users\\alice\\repo',

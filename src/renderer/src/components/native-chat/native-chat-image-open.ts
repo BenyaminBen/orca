@@ -6,13 +6,7 @@ import {
 } from '@/runtime/runtime-file-client'
 import { downloadAndOpenRemoteTerminalFile } from '@/components/terminal-pane/terminal-remote-file-download-open'
 import { IMAGE_FILE_MIME_TYPES } from '../../../../shared/image-file-extensions'
-
-export function isClientLocalChatImage(context: RuntimeFileOperationArgs): boolean {
-  return (
-    context.expectedExecutionHostId === 'local' &&
-    !getRuntimeFileReadScope(context.settings, context.connectionId)
-  )
-}
+import { isClientLocalChatImage } from './native-chat-image-destination'
 
 async function saveInlineImage(source: string, name: string) {
   const response = await fetch(source)

@@ -23,10 +23,7 @@ import {
   structuredAgentSessionOptionSnapshot,
   type StructuredAgentSessionOptionState
 } from '../../../../shared/structured-agent-session-options'
-import {
-  activeStructuredAgentSessionTurnId,
-  hasUnansweredStructuredAgentSessionDispatch
-} from '../../../../shared/structured-agent-session-projection'
+import * as sessionProjection from '../../../../shared/structured-agent-session-projection'
 import type { RuntimeClientTarget } from '@/runtime/runtime-rpc-client'
 import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
 import { useStructuredAgentSessionHold } from './use-structured-agent-session-hold'
@@ -51,6 +48,7 @@ export function useStructuredAgentSession(args: {
   isVisible: boolean
 }) {
   const { agent, isVisible, sessionId, target } = args
+  const targetKey = target.kind === 'local' ? 'local' : `environment:${target.environmentId}`
   // Acquire the provider child before reading a restored session.
   useStructuredAgentSessionHold({ sessionId, target, surface: 'desktop-chat', enabled: isVisible })
   const { state, loadingOlder, loadOlder } = useStructuredAgentSessionRead(args)
@@ -98,10 +96,11 @@ export function useStructuredAgentSession(args: {
   }, [agent, sessionId, state.fence])
 
   // Refresh options each turn to confirm which model the provider actually selected.
-  const turnId = activeStructuredAgentSessionTurnId(state.items)
+  const turnId = sessionProjection.activeStructuredAgentSessionTurnId(state.items)
   // Unanswered dispatches count as work before the provider reports a cancellable turn.
   const isWorking =
-    turnId !== null || hasUnansweredStructuredAgentSessionDispatch(state.submissions, state.fence)
+    turnId !== null ||
+    sessionProjection.hasUnansweredStructuredAgentSessionDispatch(state.submissions, state.fence)
   const turnActivity = useMemo(
     () => selectStructuredAgentTurnActivity(state.items, turnId, state.activity),
     [state.activity, state.items, turnId]
@@ -138,18 +137,19 @@ export function useStructuredAgentSession(args: {
     () => structuredAgentSessionOptionSnapshot(optionState),
     [optionState]
   )
+  const optionScopeKey = JSON.stringify([agent, sessionId, targetKey, state.fence])
+  const optionScopeIdentity = useMemo(() => ({ optionScopeKey }), [optionScopeKey])
   const setStructuredOption = useCallback(
     async (id: string, value: string | boolean, retryPermissions = false): Promise<boolean> => {
       const currentState = optionStateRef.current
       const encoded = encodeStructuredAgentSessionOptionValue(id, value)
       if (
         (id === 'permissions' &&
-          (activeStructuredAgentSessionTurnId(stateRef.current.items) !== null ||
-            hasUnansweredStructuredAgentSessionDispatch(
-              stateRef.current.submissions,
-              stateRef.current.fence
-            ) ||
-            pendingStructuredSessionPrompts(stateRef.current.items).length > 0)) ||
+          sessionProjection.projectStructuredAgentSessionStatus(
+            stateRef.current.items,
+            stateRef.current.submissions,
+            stateRef.current.fence
+          ) !== 'idle') ||
         pendingOptionRef.current !== null ||
         !optionCatalog ||
         encoded === null ||
@@ -225,6 +225,7 @@ export function useStructuredAgentSession(args: {
   )
   const optionSurface = useMemo<SessionOptionsSurface>(
     () => ({
+      scopeIdentity: optionScopeIdentity,
       getSnapshot: () => optionSnapshot,
       setOption: async (id, value) => {
         if (!(await setStructuredOption(id, value))) {
@@ -245,7 +246,7 @@ export function useStructuredAgentSession(args: {
       },
       subscribe: () => () => {}
     }),
-    [optionSnapshot, setStructuredOption]
+    [optionScopeIdentity, optionSnapshot, setStructuredOption]
   )
 
   const prompts = pendingStructuredSessionPrompts(state.items)
