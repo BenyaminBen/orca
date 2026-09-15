@@ -1,4 +1,4 @@
-import { useCallback, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import {
   closeLinkActionRequest,
   type LinkActionRequest
@@ -28,31 +28,77 @@ export function useNativeChatLinkActions(
   scope: { sessionId: string | null; isVisible: boolean }
 ): NativeChatLinkActions {
   const [linkActionRequest, setLinkActionRequest] = useState<LinkActionRequest | null>(null)
+  const activeRequestRef = useRef<LinkActionRequest | null>(null)
+  const requestGenerationRef = useRef(0)
+  const mountedRef = useRef(true)
+  const scopeKey = JSON.stringify([
+    context?.worktreeId,
+    context?.worktreePath,
+    context?.runtimeEnvironmentId,
+    scope.sessionId
+  ])
+  const scopeIdentity = `${scopeKey}:${scope.isVisible ? 'visible' : 'hidden'}`
+  const scopeIdentityRef = useRef(scopeIdentity)
+  const [previousScopeIdentity, setPreviousScopeIdentity] = useState(scopeIdentity)
+  if (previousScopeIdentity !== scopeIdentity) {
+    requestGenerationRef.current += 1
+    scopeIdentityRef.current = scopeIdentity
+    activeRequestRef.current = null
+    setPreviousScopeIdentity(scopeIdentity)
+    setLinkActionRequest(null)
+  }
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      requestGenerationRef.current += 1
+    }
+  }, [])
   const getFileActions = useCallback(
     (event: Parameters<CommentMarkdownLinkClickHandler>[0]) => {
       const anchor = event.currentTarget
+      const requestGeneration = requestGenerationRef.current
+      const requestScopeIdentity = scopeIdentityRef.current
+      const isCurrentScope = (): boolean =>
+        mountedRef.current && scopeIdentityRef.current === requestScopeIdentity && scope.isVisible
+      const isCurrentRequest = (): boolean =>
+        isCurrentScope() && requestGenerationRef.current === requestGeneration
       return {
         enabled: useAppStore.getState().settings?.terminalLinkActionPopoverEnabled !== false,
-        request: setLinkActionRequest,
+        request: (request: LinkActionRequest) => {
+          if (isCurrentRequest()) {
+            activeRequestRef.current = request
+            setLinkActionRequest(request)
+          }
+        },
+        replaceRequest: (current: LinkActionRequest, replacement: LinkActionRequest) => {
+          if (!isCurrentRequest()) {
+            return
+          }
+          if (activeRequestRef.current !== current) {
+            return
+          }
+          activeRequestRef.current = replacement
+          setLinkActionRequest((active) => (active === current ? replacement : active))
+        },
+        isCurrentRequest,
+        isCurrentScope,
         restoreFocus: () =>
           (anchor.isConnected ? anchor : rootRef.current)?.focus({ preventScroll: true })
       }
     },
-    [rootRef]
+    [rootRef, scope.isVisible]
   )
   const openFileLink = useNativeChatFileLinkClick(context, getFileActions)
-  const scopeKey = JSON.stringify([
-    context?.worktreeId,
-    context?.runtimeEnvironmentId,
-    scope.sessionId
-  ])
-  const [previousScopeKey, setPreviousScopeKey] = useState(scopeKey)
-  if (previousScopeKey !== scopeKey || (!scope.isVisible && linkActionRequest !== null)) {
-    setPreviousScopeKey(scopeKey)
-    setLinkActionRequest(null)
-  }
   const closeLinkActions = useCallback((dismissed?: LinkActionRequest) => {
-    setLinkActionRequest((current) => closeLinkActionRequest(current, dismissed))
+    const current = activeRequestRef.current
+    const next = closeLinkActionRequest(current, dismissed)
+    if (next === current) {
+      return
+    }
+    requestGenerationRef.current += 1
+    activeRequestRef.current = next
+    setLinkActionRequest(next)
   }, [])
 
   const onLinkClick = useCallback<CommentMarkdownLinkClickHandler>(
@@ -60,6 +106,9 @@ export function useNativeChatLinkActions(
       if (!context) {
         return
       }
+      requestGenerationRef.current += 1
+      activeRequestRef.current = null
+      setLinkActionRequest(null)
       const route = routeNativeChatHref(href)
       if (route.kind === 'file') {
         openFileLink?.(event, href)
@@ -84,7 +133,10 @@ export function useNativeChatLinkActions(
         actionsEnabled: state.settings?.terminalLinkActionPopoverEnabled !== false,
         restoreFocus: () =>
           (anchor.isConnected ? anchor : rootRef.current)?.focus({ preventScroll: true }),
-        request: setLinkActionRequest
+        request: (request) => {
+          activeRequestRef.current = request
+          setLinkActionRequest(request)
+        }
       })
     },
     [context, openFileLink, rootRef]

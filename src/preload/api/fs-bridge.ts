@@ -53,6 +53,7 @@ export const fsApi = {
   downloadFolder: (args: {
     dirPath: string
     connectionId: string
+    postDownloadAction?: 'reveal'
   }): Promise<{ canceled: true } | { canceled: false; destinationPath: string }> =>
     ipcRenderer.invoke('fs:downloadFolder', args),
   saveDownloadedFile: (args: {

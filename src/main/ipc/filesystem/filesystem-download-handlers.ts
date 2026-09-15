@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { BrowserWindow, dialog, ipcMain } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { open, writeFile } from 'node:fs/promises'
 import { getRuntimePathBasename } from '../../../shared/cross-platform-path'
@@ -15,27 +15,13 @@ import {
   createSiblingTransferPath,
   type DownloadFileResult
 } from './filesystem-download-promotion'
+import { completeDownload, validatePostDownloadAction } from './filesystem-download-completion'
 
 function validateRequiredString(value: unknown, label: string): string {
   if (typeof value !== 'string' || value.trim() === '') {
     throw new Error(`${label} is required`)
   }
   return value
-}
-
-function validatePostDownloadAction(value: unknown): 'reveal' | undefined {
-  if (value !== undefined && value !== 'reveal') {
-    throw new Error('Invalid post-download action')
-  }
-  return value
-}
-
-function completeDownload(destinationPath: string, action: 'reveal' | undefined) {
-  // The download handler owns this local destination, even while a remote runtime is active.
-  if (action === 'reveal') {
-    shell.showItemInFolder(destinationPath)
-  }
-  return { canceled: false as const, destinationPath }
 }
 
 export function registerFilesystemDownloadHandlers(

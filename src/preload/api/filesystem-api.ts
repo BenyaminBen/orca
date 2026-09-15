@@ -48,6 +48,7 @@ export type FilesystemApi = {
     downloadFolder: (args: {
       dirPath: string
       connectionId: string
+      postDownloadAction?: 'reveal'
     }) => Promise<{ canceled: true } | { canceled: false; destinationPath: string }>
     saveDownloadedFile: (args: {
       suggestedName: string
