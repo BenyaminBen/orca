@@ -1,4 +1,11 @@
-import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  appendFileSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import type { Page, TestInfo } from '@stablyai/playwright-test'
@@ -65,8 +72,9 @@ export async function createNativeChatWslFolders(
   registerCleanup(async () => rmSync(localRoot, { recursive: true, force: true }))
   const linuxRoot =
     location === 'drive'
-      ? toLinuxPath(localRoot)
+      ? toLinuxPath(realpathSync.native(localRoot))
       : await guest(['/usr/bin/mktemp', '-d', '/home/orca-native-chat-XXXXXX'])
+  record({ localRoot, linuxRoot })
   if (location === 'drive') {
     expect(linuxRoot).toMatch(/^\/mnt\/[a-z]\//)
   } else {
