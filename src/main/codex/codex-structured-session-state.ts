@@ -1,3 +1,4 @@
+import type { CodexPermissionPolicy } from '../../shared/codex-permissions'
 import type {
   AgentJournalItemIdentity,
   AgentSessionJournalIdentity
@@ -97,6 +98,7 @@ export type CodexSession = {
   prompts: CodexAcquisitionWindow['prompts']
   options: Map<string, string>
   reportedOptions: {
+    permissions?: CodexPermissionPolicy
     model?: string
     effort?: string
     serviceTier?: string | null

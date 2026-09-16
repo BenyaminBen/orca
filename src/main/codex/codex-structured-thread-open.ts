@@ -10,8 +10,14 @@ import {
   type CodexAppServerConnection
 } from './codex-app-server-connection'
 import { readCodexThreadId, readCodexThreadPath } from './codex-structured-thread-facts'
+import {
+  readCodexPermissionPolicy,
+  type CodexPermissionPolicy
+} from '../../shared/codex-permissions'
+import { codexPermissionThreadOverrides } from '../../shared/codex-permission-launch'
 
 export type CodexOpenedThread = {
+  permissions?: CodexPermissionPolicy
   threadId: string
   thread?: Record<string, unknown>
   /** Rollout file Codex named, when it named one. */
@@ -64,19 +70,29 @@ async function resumeCodexThread(
 
 export async function openCodexThread(
   connection: Pick<CodexAppServerConnection, 'request'>,
-  launch: { cwd: string; resumeThreadId: string | null; resumePath?: string | null },
+  launch: {
+    cwd: string
+    resumeThreadId: string | null
+    resumePath?: string | null
+    permissions?: CodexPermissionPolicy
+  },
   timeoutMs: number | undefined
 ): Promise<CodexOpenedThread> {
   const resumeParams = launch.resumeThreadId
     ? {
         threadId: launch.resumeThreadId,
         cwd: launch.cwd,
+        ...codexPermissionThreadOverrides(launch.permissions),
         ...(launch.resumePath ? { path: launch.resumePath } : {})
       }
     : null
   const opened = resumeParams
     ? await resumeCodexThread(connection, resumeParams, timeoutMs)
-    : await connection.request('thread/start', { cwd: launch.cwd }, { timeoutMs })
+    : await connection.request(
+        'thread/start',
+        { cwd: launch.cwd, ...codexPermissionThreadOverrides(launch.permissions) },
+        { timeoutMs }
+      )
   const threadId = readCodexThreadId(opened)
   if (!threadId) {
     throw new Error('codex app-server did not name the thread it opened')
@@ -94,6 +110,9 @@ export async function openCodexThread(
   const serviceTierKnown = Object.hasOwn(result, 'serviceTier')
   const serviceTier = nonEmptyString(result.serviceTier)
   return {
+    ...(readCodexPermissionPolicy(opened)
+      ? { permissions: readCodexPermissionPolicy(opened) }
+      : {}),
     threadId,
     thread,
     historyPath: readCodexThreadPath(opened),

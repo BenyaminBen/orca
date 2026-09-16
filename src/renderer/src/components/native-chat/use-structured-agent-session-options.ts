@@ -31,9 +31,22 @@ export function useStructuredAgentSessionOptions(args: {
   fence: number | null
   turnId: string | null
   mutate: StructuredAgentSessionMutate
+  isConversationIdle: () => boolean
 }) {
-  const { agent, fence, mutate, providerVisible, sessionId, target, transportEnabled, turnId } =
-    args
+  const {
+    agent,
+    fence,
+    isConversationIdle,
+    mutate,
+    providerVisible,
+    sessionId,
+    target,
+    transportEnabled,
+    turnId
+  } = args
+  const targetKey = target.kind === 'local' ? 'local' : `environment:${target.environmentId}`
+  const optionScopeKey = JSON.stringify([agent, sessionId, targetKey, fence])
+  const optionScopeIdentity = useMemo(() => ({ optionScopeKey }), [optionScopeKey])
   const [conversationSupport, setConversationSupport] = useState<{
     sessionId: string
     commands: readonly AgentSessionConversationCommand[]
@@ -99,15 +112,16 @@ export function useStructuredAgentSessionOptions(args: {
     [optionSnapshot, transportEnabled]
   )
   const setStructuredOption = useCallback(
-    async (id: string, value: string | boolean): Promise<boolean> => {
+    async (id: string, value: string | boolean, retryPermissions = false): Promise<boolean> => {
       const currentState = optionStateRef.current
       const encoded = encodeStructuredAgentSessionOptionValue(id, value)
       if (
         !transportEnabled ||
+        (id === 'permissions' && !isConversationIdle()) ||
         pendingOptionRef.current !== null ||
         !optionCatalog ||
         encoded === null ||
-        !canSetStructuredAgentSessionOption(currentState, id, value)
+        !canSetStructuredAgentSessionOption(currentState, id, value, retryPermissions)
       ) {
         return false
       }
@@ -132,7 +146,8 @@ export function useStructuredAgentSessionOptions(args: {
               ? commitStructuredAgentSessionOptionValues(current, committed)
               : current
           )
-          const picks = structuredAgentSessionOptionPicks(currentState, committed)
+          const picks =
+            id === 'permissions' ? [] : structuredAgentSessionOptionPicks(currentState, committed)
           if (picks.length > 0) {
             void enqueueSessionOptionSettingsWrite(target, { type: 'apply-picks', agent, picks })
           }
@@ -173,23 +188,41 @@ export function useStructuredAgentSessionOptions(args: {
         }
       }
     },
-    [agent, mutate, optionCatalog, sessionId, target, transportEnabled, updateOptionState]
-  )
-  const setOption = useCallback(
-    async (id: string, value: string | boolean) => {
-      await setStructuredOption(id, value)
-      return { snapshot: structuredAgentSessionOptionSnapshot(optionStateRef.current) }
-    },
-    [setStructuredOption]
+    [
+      agent,
+      isConversationIdle,
+      mutate,
+      optionCatalog,
+      sessionId,
+      target,
+      transportEnabled,
+      updateOptionState
+    ]
   )
   const optionSurface = useMemo<SessionOptionsSurface>(
     () => ({
+      scopeIdentity: optionScopeIdentity,
       getSnapshot: () => visibleOptionSnapshot,
-      setOption,
-      invokeAction: async () => ({ snapshot: visibleOptionSnapshot }),
+      setOption: async (id, value) => {
+        if (!(await setStructuredOption(id, value))) {
+          throw new Error(
+            'The chat could not accept this option change. Try again when it is idle.'
+          )
+        }
+        return { snapshot: structuredAgentSessionOptionSnapshot(optionStateRef.current) }
+      },
+      invokeAction: async (id) => {
+        const desired = optionStateRef.current.permissions?.desired
+        if (id !== 'permissions' || !desired || !(await setStructuredOption(id, desired, true))) {
+          throw new Error(
+            'The selected permissions could not be restored. Messages still use the active permissions.'
+          )
+        }
+        return { snapshot: structuredAgentSessionOptionSnapshot(optionStateRef.current) }
+      },
       subscribe: () => () => {}
     }),
-    [setOption, visibleOptionSnapshot]
+    [optionScopeIdentity, setStructuredOption, visibleOptionSnapshot]
   )
 
   return {
@@ -199,6 +232,7 @@ export function useStructuredAgentSessionOptions(args: {
         : [],
     optionSnapshot: visibleOptionSnapshot,
     optionSurface,
-    setStructuredOption
+    setStructuredOption,
+    hasPendingOptionMutation: () => pendingOptionRef.current !== null
   }
 }

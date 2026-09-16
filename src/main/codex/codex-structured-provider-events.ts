@@ -5,6 +5,7 @@ import * as codexRewind from './codex-structured-rewind'
 import type { CodexSession, CodexStructuredSessionEvent } from './codex-structured-session-state'
 import { readCodexThreadId } from './codex-structured-thread-facts'
 import type { CodexStructuredTurnCancellation } from './codex-structured-turn-cancellation'
+import { observeCodexPermissions } from './codex-structured-permissions'
 
 type EmitCodexEvent = (
   session: CodexSession,
@@ -43,7 +44,7 @@ export function deliverCodexNotification(
   const threadId = readCodexThreadId(params) ?? session.threadId
   // Dispatch identity settles on the user-message echo inside the translator,
   // which is where the ordinal a replay will compute is minted.
-  return emit(session, {
+  const admission = emit(session, {
     type: 'notification',
     sessionId,
     threadId,
@@ -51,6 +52,10 @@ export function deliverCodexNotification(
     params,
     ...(observedAt !== undefined ? { observedAt } : {})
   })
+  if (admission.accepted && method === 'thread/settings/updated') {
+    observeCodexPermissions(session, params)
+  }
+  return admission
 }
 
 export function deliverCodexServerRequest(

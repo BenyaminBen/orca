@@ -382,7 +382,7 @@ describe('NativeChatSessionOptionPickers', () => {
       />
     )
     expect(screen.getByText('Model')).not.toBeNull()
-    expect(screen.getAllByText('Sent to the agent — not confirmed').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Sent to the agent - not confirmed').length).toBeGreaterThan(0)
   })
 
   it('does not hedge a dispatched value the structured transport produced', () => {
@@ -601,6 +601,6 @@ describe('NativeChatSessionOptionPickers', () => {
       />
     )
     expect(screen.getAllByText('Thinking').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Sent to the agent — not confirmed').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Sent to the agent - not confirmed').length).toBeGreaterThan(0)
   })
 })

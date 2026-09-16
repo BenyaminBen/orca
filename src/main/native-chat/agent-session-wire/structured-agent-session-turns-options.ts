@@ -1,11 +1,16 @@
 import type { AgentSessionOptionResult } from '../../../shared/agent-session-wire'
 import { isAgentSessionOptionRejectedError } from './structured-agent-session-option-error'
 import type { AgentSessionTurnContext, TurnOutcome } from './structured-agent-session-turns'
+import { conversationActivityBlocked } from './structured-conversation-command-admission'
 
 export async function performSetOption(
   ctx: AgentSessionTurnContext,
   input: { key: string; value: string }
 ): Promise<TurnOutcome<AgentSessionOptionResult>> {
+  const blocked = input.key === 'permissions' ? conversationActivityBlocked(ctx) : null
+  if (blocked) {
+    return { ok: false, refusal: { code: 'agent_session_operation_invalid', message: blocked } }
+  }
   let applied: void | Readonly<Record<string, string>>
   try {
     applied = await ctx.adapter.setOption({

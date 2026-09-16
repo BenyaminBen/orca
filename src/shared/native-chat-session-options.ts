@@ -1,4 +1,5 @@
 import type { AgentType } from './agent-status-types'
+import type { CodexPermissionOptions } from './codex-permissions'
 
 export type SessionOptionValue = string | boolean
 
@@ -6,6 +7,7 @@ export type SessionOptionSelectChoice = {
   value: string
   label: string
   description?: string
+  disabledReason?: string
 }
 
 /** `default` is the catalog's own value shown before anything is observed —
@@ -32,7 +34,7 @@ export type SessionOptionDescriptor = {
   id: string
   label: string
   description?: string
-  category?: 'model' | 'thought_level' | 'model_config' | 'mode'
+  category?: 'model' | 'thought_level' | 'model_config' | 'mode' | 'permissions'
   kind:
     | {
         type: 'select'
@@ -52,6 +54,7 @@ export type SessionOptionDescriptor = {
   transport: NativeChatLiveOptionTransport
   settable: boolean
   disabledReason?: SessionOptionDisabledReason
+  permissionState?: Pick<CodexPermissionOptions, 'current' | 'desired' | 'restoration'>
   /** Why: picker-only and toggle-only PTY commands cannot be represented as
    * a truthful radio/checkbox state, so the producer exposes an action row. */
   action?: { type: 'agent-picker' | 'toggle-command' }
@@ -113,6 +116,8 @@ export type NativeChatSessionOptionSettingsMutation =
   | { type: 'clear-model-if-missing'; agent: AgentType; availableModelIds: readonly string[] }
 
 export type SessionOptionsSurface = {
+  /** Stable only for one mounted conversation-owner lifetime. */
+  scopeIdentity?: object
   getSnapshot(): SessionOptionDescriptor[]
   /** Apply an absolute target; known flip-only options use their tracked baseline. */
   setOption(id: string, value: SessionOptionValue): Promise<SessionOptionSetResult>
