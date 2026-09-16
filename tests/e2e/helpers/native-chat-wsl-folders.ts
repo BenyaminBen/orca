@@ -6,7 +6,7 @@ import { expect } from './orca-app'
 import { getFirstWslDistro } from './wsl-golden-stub-agent'
 import { runProcess } from '../../../src/shared/child-process/run-process'
 import { buildWslExecArgs } from '../../../src/shared/wsl-login-shell-command'
-import { toLinuxPath, toWindowsWslUncPath } from '../../../src/shared/wsl-paths'
+import { toLinuxPath, toWindowsWslPath, toWindowsWslUncPath } from '../../../src/shared/wsl-paths'
 
 export type WslFolderLocation = 'canonical' | 'legacy' | 'drive'
 export const SELECTED_FOLDER = 'Internal folder/Nested folder'
@@ -82,8 +82,12 @@ export async function createNativeChatWslFolders(
   const legacyRoot = canonicalRoot.replace('\\\\wsl.localhost\\', '\\\\wsl$\\')
   const workspacePath = location === 'legacy' ? legacyRoot : canonicalRoot
   const content = 'Real WSL folder enumeration\n'
-  writeFileSync(path.win32.join(canonicalRoot, SELECTED_FOLDER, CHILD_FILE), content)
-  writeFileSync(path.win32.join(toWindowsWslUncPath(outsideFolder, distro), CHILD_FILE), content)
+  // Create drive-backed fixtures natively; both UNC read paths remain checked below.
+  for (const folder of [internalFolder, outsideFolder]) {
+    const fixturePath = path.win32.join(toWindowsWslPath(folder, distro), CHILD_FILE)
+    writeFileSync(fixturePath, content)
+    record({ createdFile: fixturePath })
+  }
   for (const root of [canonicalRoot, legacyRoot]) {
     expect(readFileSync(path.win32.join(root, SELECTED_FOLDER, CHILD_FILE), 'utf8')).toBe(content)
   }
