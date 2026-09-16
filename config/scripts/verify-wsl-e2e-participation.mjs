@@ -8,7 +8,7 @@ export const WSL_TEST_TITLES = [
   'existing WSL terminal keeps paste runtime after default shell changes',
   'WSL native chat opens a folder under the canonical share',
   'WSL native chat opens a folder under the legacy share',
-  'WSL native chat opens a folder under a drive mount',
+  'WSL native chat opens a Windows drive folder in a WSL project',
   'WSL native chat rejects an existing folder outside the workspace'
 ]
 

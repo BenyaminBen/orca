@@ -1,5 +1,6 @@
 import {
   appendFileSync,
+  existsSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
@@ -82,21 +83,43 @@ export async function createNativeChatWslFolders(
       await guest(['/usr/bin/rm', '-rf', '--', linuxRoot])
     })
   }
-  const linuxWorkspace = path.posix.join(linuxRoot, 'workspace')
+  const driveWorkspace =
+    location === 'drive'
+      ? await page.evaluate(() => {
+          const state = window.__store!.getState()
+          const worktree = Object.values(state.worktreesByRepo)
+            .flat()
+            .find((entry) => entry.id === state.activeWorktreeId)
+          if (!worktree) {
+            throw new Error('Seeded drive worktree is unavailable')
+          }
+          return worktree.path
+        })
+      : null
+  const linuxWorkspace = driveWorkspace
+    ? toLinuxPath(realpathSync.native(driveWorkspace))
+    : path.posix.join(linuxRoot, 'workspace')
+  if (driveWorkspace) {
+    expect(linuxWorkspace).toMatch(/^\/mnt\/[a-z]\//)
+    const ownedFolder = path.join(driveWorkspace, SELECTED_FOLDER.split('/')[0])
+    expect(existsSync(ownedFolder), 'The fixture must own its new folder').toBe(false)
+    registerCleanup(async () => rmSync(ownedFolder, { recursive: true, force: true }))
+  }
   const internalFolder = path.posix.join(linuxWorkspace, SELECTED_FOLDER)
   const outsideFolder = path.posix.join(linuxRoot, 'workspace-other', 'Outside folder')
   await guest(['/usr/bin/mkdir', '-p', internalFolder, outsideFolder])
   const canonicalRoot = toWindowsWslUncPath(linuxWorkspace, distro)
   const legacyRoot = canonicalRoot.replace('\\\\wsl.localhost\\', '\\\\wsl$\\')
-  const workspacePath = location === 'legacy' ? legacyRoot : canonicalRoot
+  const workspacePath = driveWorkspace ?? (location === 'legacy' ? legacyRoot : canonicalRoot)
   const content = 'Real WSL folder enumeration\n'
-  // Create drive-backed fixtures natively; both UNC read paths remain checked below.
+  // Windows drive files use their native path; Linux files use the WSL share.
   for (const folder of [internalFolder, outsideFolder]) {
     const fixturePath = path.win32.join(toWindowsWslPath(folder, distro), CHILD_FILE)
     writeFileSync(fixturePath, content)
     record({ createdFile: fixturePath })
   }
-  for (const root of [canonicalRoot, legacyRoot]) {
+  const windowsReadRoots = driveWorkspace ? [driveWorkspace] : [canonicalRoot, legacyRoot]
+  for (const root of windowsReadRoots) {
     expect(readFileSync(path.win32.join(root, SELECTED_FOLDER, CHILD_FILE), 'utf8')).toBe(content)
   }
   expect(await guest(['/usr/bin/cat', path.posix.join(internalFolder, CHILD_FILE)])).toBe(
@@ -112,7 +135,7 @@ export async function createNativeChatWslFolders(
     workspacePath,
     internalFolder,
     outsideFolder,
-    aliasesVerified: [canonicalRoot, legacyRoot]
+    windowsReadRoots
   })
-  return { localRoot, workspacePath, internalFolder, outsideFolder }
+  return { localRoot, workspacePath, internalFolder, outsideFolder, distro }
 }

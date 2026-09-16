@@ -5,6 +5,7 @@ import type { Page } from '@stablyai/playwright-test'
 import { test, expect } from './helpers/orca-app'
 import { waitForSessionReady, ensureTerminalVisible } from './helpers/store'
 import { waitForActivePaneHookDescriptor } from './helpers/terminal-active-pane'
+import { useWslRuntimeForActiveProject as configureWslRuntimeForActiveProject } from './helpers/wsl-golden-stub-agent'
 import {
   CHILD_FILE,
   SELECTED_FOLDER,
@@ -12,12 +13,13 @@ import {
   type WslFolderLocation
 } from './helpers/native-chat-wsl-folders'
 
-test.use({ seedTestRepo: false })
+const folderTest = test.extend({ seedTestRepo: false })
 test.skip(process.platform !== 'win32', 'Requires a real Windows WSL1 host')
 
 async function seedFolderChat(
   page: Page,
-  folders: Awaited<ReturnType<typeof createNativeChatWslFolders>>
+  folders: Awaited<ReturnType<typeof createNativeChatWslFolders>>,
+  location: WslFolderLocation
 ): Promise<string> {
   const sessionId = randomUUID()
   const transcriptPath = path.join(folders.localRoot, `${sessionId}.jsonl`)
@@ -46,36 +48,49 @@ async function seedFolderChat(
       )
       .join('\n')}\n`
   )
-  const workspaceId = await page.evaluate(async (folderPath) => {
-    const state = window.__store!.getState()
-    await state.updateSettingsOrThrow({
-      experimentalNativeChat: true,
-      terminalLinkActionPopoverEnabled: true
-    })
-    const group = await window.api.projectGroups.create({
-      name: 'WSL folder links',
-      parentPath: folderPath,
-      createdFrom: 'manual'
-    })
-    if (!group) {
-      throw new Error('Folder project group was not created')
-    }
-    await state.fetchProjectGroups()
-    const workspace = await state.createFolderWorkspace({
-      projectGroupId: group.id,
-      name: 'WSL workspace',
-      folderPath
-    })
-    if (!workspace) {
-      throw new Error('Folder workspace was not created')
-    }
-    const id = `folder:${workspace.id}`
-    state.setActiveWorktree(id)
-    if (!window.__store!.getState().tabsByWorktree[id]?.length) {
-      state.createTab(id)
-    }
-    return id
-  }, folders.workspacePath)
+  const workspaceId = await page.evaluate(
+    async ({ folderPath, location }) => {
+      const state = window.__store!.getState()
+      await state.updateSettingsOrThrow({
+        experimentalNativeChat: true,
+        terminalLinkActionPopoverEnabled: true
+      })
+      if (location === 'drive') {
+        if (!state.activeWorktreeId) {
+          throw new Error('Seeded drive worktree is not active')
+        }
+        return state.activeWorktreeId
+      }
+      const group = await window.api.projectGroups.create({
+        name: 'WSL folder links',
+        parentPath: folderPath,
+        createdFrom: 'manual'
+      })
+      if (!group) {
+        throw new Error('Folder project group was not created')
+      }
+      await state.fetchProjectGroups()
+      const workspace = await state.createFolderWorkspace({
+        projectGroupId: group.id,
+        name: 'WSL workspace',
+        folderPath
+      })
+      if (!workspace) {
+        throw new Error('Folder workspace was not created')
+      }
+      const id = `folder:${workspace.id}`
+      state.setActiveWorktree(id)
+      if (!window.__store!.getState().tabsByWorktree[id]?.length) {
+        state.createTab(id)
+      }
+      return id
+    },
+    { folderPath: folders.workspacePath, location }
+  )
+  if (location === 'drive') {
+    await configureWslRuntimeForActiveProject(page, folders.distro)
+    await page.evaluate((id) => window.__store!.getState().createTab(id), workspaceId)
+  }
   await ensureTerminalVisible(page)
   const descriptor = await waitForActivePaneHookDescriptor(page)
   expect(descriptor.worktreeId).toBe(workspaceId)
@@ -108,7 +123,11 @@ async function seedFolderChat(
 const scenarios: { title: string; location: WslFolderLocation; reject?: boolean }[] = [
   { title: 'WSL native chat opens a folder under the canonical share', location: 'canonical' },
   { title: 'WSL native chat opens a folder under the legacy share', location: 'legacy' },
-  { title: 'WSL native chat opens a folder under a drive mount', location: 'drive' },
+  {
+    title: 'WSL native chat opens a Windows drive folder in a WSL project',
+    location: 'drive',
+    reject: true
+  },
   {
     title: 'WSL native chat rejects an existing folder outside the workspace',
     location: 'canonical',
@@ -117,7 +136,8 @@ const scenarios: { title: string; location: WslFolderLocation; reject?: boolean 
 ]
 
 for (const scenario of scenarios) {
-  test(
+  const scenarioTest = scenario.location === 'drive' ? test : folderTest
+  scenarioTest(
     scenario.title,
     async ({ orcaPage: page, electronApp, registerPostElectronShutdownCleanup }, testInfo) => {
       await waitForSessionReady(page)
@@ -147,16 +167,19 @@ for (const scenario of scenarios) {
           testInfo,
           registerPostElectronShutdownCleanup
         )
-        const workspaceId = await seedFolderChat(page, folders)
-        // A canonicalized root would turn the legacy/mount regression into a false positive.
+        const workspaceId = await seedFolderChat(page, folders, scenario.location)
+        // Preserve the stored root spelling, including the legacy share alias.
         expect(
-          await page.evaluate(
-            (id) =>
-              window
-                .__store!.getState()
-                .folderWorkspaces.find((workspace) => `folder:${workspace.id}` === id)?.folderPath,
-            workspaceId
-          )
+          await page.evaluate((id) => {
+            const state = window.__store!.getState()
+            return (
+              state.folderWorkspaces.find((workspace) => `folder:${workspace.id}` === id)
+                ?.folderPath ??
+              Object.values(state.worktreesByRepo)
+                .flat()
+                .find((worktree) => worktree.id === id)?.path
+            )
+          }, workspaceId)
         ).toBe(folders.workspacePath)
         await page.getByRole('link', { name: 'internal folder', exact: true }).click()
         await page.getByRole('button', { name: /^Open in Orca/ }).click()
