@@ -14,6 +14,8 @@ import type { AgentSessionRecordStore } from '../runtime/agent-session-record-st
 import type { CodexStructuredLaunch } from './codex-structured-session-adapter'
 import { resolvePinnedCodexRolloutProof } from './codex-tui-rollout-proof'
 import { isWindowsProcessStartTimeAvailable } from '../windows/windows-process-table'
+import type { CodexStructuredPermissionMode } from './codex-structured-permission-mode'
+import { permissionPolicyFromOptions } from '../../shared/codex-permission-launch'
 
 export type CodexStructuredLaunchResolverDeps = {
   store: AgentSessionRecordStore
@@ -27,9 +29,9 @@ export type CodexStructuredLaunchResolverDeps = {
   resolveRollout?: typeof resolvePinnedCodexRolloutProof
   /** Test seam for the host capability; production uses the native process table. */
   isWindowsProcessStartTimeAvailable?: () => boolean
-  /** The user's Agent Permissions setting as app-server argv, re-read per acquisition.
+  /** The user's resolved Agent Permissions setting, re-read per acquisition.
    *  Absent means the CLI's own approval prompts stay on. */
-  resolvePermissionArgs?: () => string[]
+  resolvePermissionMode?: () => CodexStructuredPermissionMode
 }
 
 export function createCodexStructuredLaunchResolver(
@@ -71,7 +73,8 @@ export function createCodexStructuredLaunchResolver(
     })
     // `record.launchArgs` is deliberately not read: the configured CLI arguments are a terminal
     // concern, and the permission posture they used to smuggle in is derived per acquisition.
-    const args = [...(deps.resolvePermissionArgs?.() ?? []), 'app-server']
+    const permissionMode = deps.resolvePermissionMode?.()
+    const args = [...(permissionMode?.args ?? []), 'app-server']
     const head = agentSessionProviderHandleChainHead(record.providerHandleChain)
     const resumeThreadId = head?.handle.provider === 'codex' ? head.handle.threadId : null
     return {
@@ -83,6 +86,11 @@ export function createCodexStructuredLaunchResolver(
       // An empty chain is a session that has never proved a thread, so it
       // starts one; anything else resumes the last link this session proved.
       resumeThreadId,
+      ...(!resumeThreadId &&
+      !permissionPolicyFromOptions(record.options) &&
+      permissionMode?.initialPermissions
+        ? { initialPermissions: permissionMode.initialPermissions }
+        : {}),
       ...(resumeThreadId
         ? {
             resumePath: await (deps.resolveRollout ?? resolvePinnedCodexRolloutProof)(

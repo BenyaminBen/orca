@@ -1,4 +1,4 @@
-name: Windows WSL terminal E2E
+name: Windows WSL E2E
 
 on:
   workflow_dispatch:
@@ -26,11 +26,18 @@ jobs:
     timeout-minutes: 30
     env:
       NODE_OPTIONS: --max-old-space-size=4096
+      ORCA_BACKGROUND_LAUNCH: '1'
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
+      - name: Record workflow and tested revisions
+        run: |
+          Write-Output "Workflow head: $env:GITHUB_SHA"
+          git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot identify tested commit' }
+          Write-Output "Runner image: $env:ImageOS $env:ImageVersion"
       - uses: ./.github/actions/setup-wsl-test-runtime
       - uses: ./.github/actions/install-node-dependencies
         with:
@@ -41,7 +48,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Relay build failed' }
           pnpm exec electron-vite build --mode e2e
           if ($LASTEXITCODE -ne 0) { throw 'Electron build failed' }
-      - name: Exercise real WSL launch and paste
+      - name: Exercise real WSL terminals and native chat folders
         env:
           SKIP_BUILD: '1'
           ORCA_E2E_FORWARD_APP_LOGS: '1'
@@ -50,13 +57,15 @@ jobs:
           pnpm exec playwright test
           tests/e2e/golden-tab-bar-agent-launch.spec.ts
           tests/e2e/terminal-windows-shell-paste-ownership.spec.ts
+          tests/e2e/native-chat-wsl-file-destinations.spec.ts
           --config tests/playwright.config.ts
           --project=electron-headless
           --grep "WSL"
           --repeat-each=3
           --workers=1
+          --retries=0
           --reporter=list,json
-      - name: Require all nine WSL executions
+      - name: Require all 21 WSL executions
         if: always()
         run: node config/scripts/verify-wsl-e2e-participation.mjs test-results/wsl-results.json
       - name: Upload WSL participation report
@@ -66,9 +75,10 @@ jobs:
           name: windows-wsl-participation-report
           path: test-results/wsl-results.json
           retention-days: 3
-      - uses: actions/upload-artifact@v7
-        if: failure()
+      - name: Upload WSL screenshots and failure evidence
+        uses: actions/upload-artifact@v7
+        if: always()
         with:
-          name: windows-wsl-terminal-traces
+          name: windows-wsl-evidence
           path: test-results/
           retention-days: 7

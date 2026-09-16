@@ -41,7 +41,7 @@ vi.mock('@/i18n/i18n', () => ({
   translate: (_key: string, fallback: string, values?: Record<string, string>) =>
     fallback.replace(/{{(\w+)}}/g, (_, key: string) => values?.[key] ?? '')
 }))
-vi.mock('sonner', () => ({ toast: { error: mocks.error } }))
+vi.mock('sonner', () => ({ toast: { error: mocks.error, success: vi.fn() } }))
 vi.mock('./native-chat-session-option-settings-write', () => ({
   enqueueSessionOptionSettingsWrite: mocks.enqueueSettingsWrite
 }))
@@ -114,10 +114,12 @@ function deferred<T>() {
 
 function PermissionHarness({
   renderVersion,
+  visible = true,
   sessionId,
   target
 }: {
   renderVersion: number
+  visible?: boolean
   sessionId?: string
   target: RuntimeClientTarget
 }): React.JSX.Element | null {
@@ -125,7 +127,7 @@ function PermissionHarness({
     sessionId: sessionId ?? 'session-1',
     target,
     agent: 'codex',
-    isVisible: true
+    isVisible: visible
   })
   const descriptor = controller.optionSnapshot.find(({ id }) => id === 'permissions')
   if (!descriptor) {
@@ -144,6 +146,7 @@ function PermissionHarness({
 
 function permissionTree(props: {
   renderVersion: number
+  visible?: boolean
   sessionId?: string
   target: RuntimeClientTarget
 }): React.JSX.Element {
@@ -175,6 +178,54 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('structured permission confirmation ownership', () => {
+  it.each(['visible', 'hidden', 'hidden-returned'] as const)(
+    'honors the visibility lifetime and skip preference when %s',
+    async (transition) => {
+      const confirmation = deferred<boolean>()
+      mocks.confirm.mockReturnValue(confirmation.promise)
+      mocks.updateSettings.mockResolvedValue(undefined)
+      mocks.call.mockImplementation((_target, method) => {
+        if (method === 'agentSession.options') {
+          return Promise.resolve(OPTIONS)
+        }
+        if (method === 'agentSession.setOption') {
+          return Promise.resolve({
+            ok: true,
+            value: {
+              key: 'permissions',
+              value: 'full-access',
+              options: { permissions: 'full-access' }
+            }
+          })
+        }
+        return Promise.resolve(null)
+      })
+      const view = render(permissionTree({ renderVersion: 1, target: LOCAL_TARGET_ONE }))
+      await screen.findByRole('button', { name: /Permissions Ask for approval/ })
+      await openPermissionMenu()
+      fireEvent.click(screen.getByRole('menuitemradio', { name: /Full Access/ }))
+      await waitFor(() => expect(mocks.confirm).toHaveBeenCalledOnce())
+      if (transition !== 'visible') {
+        view.rerender(
+          permissionTree({ renderVersion: 2, target: LOCAL_TARGET_ONE, visible: false })
+        )
+      }
+      if (transition === 'hidden-returned') {
+        view.rerender(permissionTree({ renderVersion: 3, target: LOCAL_TARGET_ONE, visible: true }))
+        await screen.findByRole('button', { name: /Permissions Ask for approval/ })
+      }
+      await act(async () => {
+        mocks.confirm.mock.calls[0]![0].dontAskAgain?.onConfirmed()
+        confirmation.resolve(true)
+        await confirmation.promise
+      })
+      expect(
+        mocks.call.mock.calls.filter(([, method]) => method === 'agentSession.setOption')
+      ).toHaveLength(transition === 'visible' ? 1 : 0)
+      expect(mocks.updateSettings).toHaveBeenCalledTimes(transition === 'visible' ? 1 : 0)
+    }
+  )
+
   it('applies acceptance through the refreshed surface for the same conversation', async () => {
     const refreshed = deferred<AgentSessionOptionsResult>()
     const confirmation = deferred<boolean>()

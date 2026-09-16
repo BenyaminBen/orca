@@ -20,6 +20,8 @@ import { translate } from '@/i18n/i18n'
 import { activateAndRevealWorkspace, activateAndRevealWorktree } from '@/lib/worktree-activation'
 import { resolveKnownWorktreeRootPathLink } from './terminal-worktree-path-link'
 import { parseWslUncPath, toWindowsWslPath } from '../../../../shared/wsl-paths'
+import { relativePathInsideRoot, resolveRuntimePath } from '../../../../shared/cross-platform-path'
+import { joinPath } from '@/lib/path'
 import {
   LOCAL_EXECUTION_HOST_ID,
   toRuntimeExecutionHostId,
@@ -136,6 +138,22 @@ function schedulePendingEditorReveal(callback: () => void): void {
   pendingEditorRevealFrameIds.push(firstFrameId)
 }
 
+function wslDirectoryRevealPath(filePath: string, rootPath: string, distro: string): string | null {
+  const root = parseWslUncPath(rootPath)
+  const destination = parseWslUncPath(filePath)
+  if ([root, destination].some((unc) => unc && unc.distro.toLowerCase() !== distro.toLowerCase())) {
+    return null
+  }
+  const mappedRoot = root ? toWindowsWslPath(root.linuxPath, distro) : rootPath
+  const mappedFile = mapTerminalFilePath(destination?.linuxPath ?? filePath, rootPath, distro)
+  const relative = relativePathInsideRoot(
+    resolveRuntimePath(mappedRoot, mappedRoot),
+    resolveRuntimePath(mappedRoot, mappedFile)
+  )
+  // Explorer rows use the stored root spelling, including its share alias and drive mount.
+  return relative === null ? null : joinPath(rootPath, relative)
+}
+
 export function openDetectedFilePath(
   filePath: string,
   line: number | null,
@@ -143,18 +161,20 @@ export function openDetectedFilePath(
   deps: TerminalFileOpenDeps
 ): void {
   const { openWithSystemDefault = false, runtimeEnvironmentId, worktreeId, worktreePath } = deps
-  const mappedFilePath = mapTerminalFilePath(
-    filePath,
-    worktreePath,
-    terminalLinkWslDistro(deps.wslDistro, runtimeEnvironmentId)
-  )
+  const fileContext =
+    deps.fileContext ?? getTerminalFileContext(worktreeId, worktreePath, runtimeEnvironmentId)
+  const remoteScope =
+    runtimeEnvironmentId || getRuntimeFileReadScope(fileContext.settings, fileContext.connectionId)
+  const wslDistro =
+    remoteScope || deps.wslDistro === null
+      ? null
+      : deps.wslDistro?.trim() || parseWslUncPath(worktreePath)?.distro
+  const mappedFilePath = mapTerminalFilePath(filePath, worktreePath, wslDistro)
   const requestId = ++latestOpenDetectedFilePathRequestId
   cancelPendingEditorRevealFrames()
 
   void (async () => {
     let statResult
-    const fileContext =
-      deps.fileContext ?? getTerminalFileContext(worktreeId, worktreePath, runtimeEnvironmentId)
     const canOpenWithSystemDefault =
       !getRuntimeFileReadScope(fileContext.settings, fileContext.connectionId) &&
       shouldOpenTerminalFileWithSystemDefault(fileContext, mappedFilePath)
@@ -199,9 +219,14 @@ export function openDetectedFilePath(
 
     if (statResult.isDirectory) {
       if (deps.openDirectoryInOrca && !openWithSystemDefault) {
-        if (isPathInsideWorktree(mappedFilePath, worktreePath)) {
+        const revealPath = wslDistro
+          ? wslDirectoryRevealPath(filePath, worktreePath, wslDistro)
+          : isPathInsideWorktree(mappedFilePath, worktreePath)
+            ? mappedFilePath
+            : null
+        if (revealPath !== null) {
           activateAndRevealWorkspace(worktreeId, { providesInitialSurface: true })
-          useAppStore.getState().revealInExplorer(worktreeId, mappedFilePath)
+          useAppStore.getState().revealInExplorer(worktreeId, revealPath)
         } else {
           toast.error(
             translate(

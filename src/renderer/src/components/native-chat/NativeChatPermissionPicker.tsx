@@ -55,6 +55,7 @@ export function NativeChatPermissionPicker(props: {
     const capturedOwner = surface.scopeIdentity ?? surface
     inFlight.current = true
     setPending(true)
+    let rememberConfirmation = false
     try {
       if (value === 'full-access' && !settings?.skipFullAccessConfirm) {
         const accepted = await confirm({
@@ -71,14 +72,9 @@ export function NativeChatPermissionPicker(props: {
             'Enable full access'
           ),
           dontAskAgain: {
-            onConfirmed: () =>
-              persistConfirmationSkipPreference({
-                updates: { skipFullAccessConfirm: true },
-                settingsSectionId: 'general-full-access-confirm',
-                updateSettings,
-                openSettingsPage,
-                openSettingsTarget
-              })
+            onConfirmed: () => {
+              rememberConfirmation = true
+            }
           }
         })
         if (!accepted) {
@@ -98,6 +94,15 @@ export function NativeChatPermissionPicker(props: {
         )
       }
       await currentProps.surface.setOption('permissions', value)
+      if (rememberConfirmation) {
+        persistConfirmationSkipPreference({
+          updates: { skipFullAccessConfirm: true },
+          settingsSectionId: 'general-full-access-confirm',
+          updateSettings,
+          openSettingsPage,
+          openSettingsTarget
+        })
+      }
     } catch (error) {
       if (mounted.current) {
         toast.error(

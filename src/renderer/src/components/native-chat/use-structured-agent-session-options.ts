@@ -46,7 +46,11 @@ export function useStructuredAgentSessionOptions(args: {
   } = args
   const targetKey = target.kind === 'local' ? 'local' : `environment:${target.environmentId}`
   const optionScopeKey = JSON.stringify([agent, sessionId, targetKey, fence])
-  const optionScopeIdentity = useMemo(() => ({ optionScopeKey }), [optionScopeKey])
+  // Leaving a retained pane invalidates its owner even when that pane becomes visible again.
+  const optionScopeIdentity = useMemo(
+    () => ({ optionScopeKey, providerVisible }),
+    [optionScopeKey, providerVisible]
+  )
   const [conversationSupport, setConversationSupport] = useState<{
     sessionId: string
     commands: readonly AgentSessionConversationCommand[]

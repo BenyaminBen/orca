@@ -24,6 +24,7 @@ export type CodexStructuredLaunch = {
   codexHome: string | null
   resumeThreadId: string | null
   resumePath?: string | null
+  initialPermissions?: CodexPermissionPolicy
   env?: Record<string, string>
 }
 

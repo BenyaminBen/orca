@@ -60,6 +60,38 @@ function fixture(
 }
 
 describe('structured permission acquisition recovery', () => {
+  it('never applies a new-thread default to a resumed thread without saved permissions', async () => {
+    const { codex } = fixture(null)
+    const adapter = adapterFor(codex, {
+      resumeThreadId: THREAD_ID,
+      initialPermissions: codexPermissionPolicy('full-access')
+    })
+    await adapter.acquire({ ...acquire, options: {} })
+    const request = codex.connections[0]!.calls.find(({ method }) => method === 'thread/resume')!
+    expect(request.params).not.toHaveProperty('approvalPolicy')
+    expect(request.params).not.toHaveProperty('sandbox')
+  })
+
+  it('requires confirmation of a host-restricted initial fallback', async () => {
+    const { codex } = fixture()
+    codex.routes['thread/start'] = () => ({
+      thread: { id: THREAD_ID },
+      ...codexPermissionPolicy('full-access')
+    })
+    const adapter = adapterFor(codex, { initialPermissions: codexPermissionPolicy('full-access') })
+    await expect(adapter.acquire({ ...acquire, options: {} })).rejects.toThrow('did not confirm')
+    expect(codex.connections[0]!.closeCount).toBe(1)
+  })
+
+  it('refuses an initial default when the host allows no fallback preset', async () => {
+    const { codex } = fixture({ allowedSandboxModes: ['read-only'] })
+    const adapter = adapterFor(codex, { initialPermissions: codexPermissionPolicy('full-access') })
+    await expect(adapter.acquire({ ...acquire, options: {} })).rejects.toThrow(
+      'No permitted permission preset'
+    )
+    expect(codex.connections[0]!.calls.some(({ method }) => method === 'thread/start')).toBe(false)
+  })
+
   it('reopens once under allowed permissions, retains durable intent, and keeps send and clear usable', async () => {
     const { adapter, codex } = fixture()
     await adapter.acquire(acquire)

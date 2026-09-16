@@ -3,7 +3,16 @@ import type { AgentSessionRecord } from '../../shared/agent-session-record'
 import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
 import type { AgentSessionRecordStore } from '../runtime/agent-session-record-store'
 import { createCodexStructuredLaunchResolver } from './codex-structured-launch-resolution'
-import { codexStructuredPermissionArgsForSettings } from './codex-structured-permission-mode'
+import { codexStructuredPermissionModeForSettings } from './codex-structured-permission-mode'
+import { codexPermissionPolicy } from '../../shared/codex-permissions'
+import { readNativeSessionOptions } from '../native-chat/agent-session-wire/structured-agent-session-option-restoration'
+import {
+  adapterFor,
+  fakeCodex,
+  identityFor,
+  THREAD_ID
+} from './codex-structured-session-adapter-fixture'
+import { codexProviderHandleLink } from './codex-structured-owner-identity'
 
 const SESSION_ID = 'session-1'
 const IDENTITY = { sessionId: SESSION_ID } as Parameters<
@@ -48,11 +57,158 @@ function resolverFor(
     resolveCommand: () => '/usr/local/bin/codex',
     resolveRollout,
     isWindowsProcessStartTimeAvailable: () => true,
-    resolvePermissionArgs: () => codexStructuredPermissionArgsForSettings({ agentDefaultArgs })
+    resolvePermissionMode: () => codexStructuredPermissionModeForSettings({ agentDefaultArgs })
   })
 }
 
 describe('codex structured launch resolution', () => {
+  it.each([
+    { name: 'default bypass', initial: true, options: {}, expected: 'full-access' },
+    { name: 'Manual', manual: true, options: {}, expected: null },
+    {
+      name: 'saved restrictive selection',
+      options: { permissions: 'ask-for-approval' },
+      expected: 'ask-for-approval'
+    },
+    {
+      name: 'saved Full Access in Manual',
+      manual: true,
+      options: { permissions: 'full-access' },
+      expected: 'full-access'
+    },
+    {
+      name: 'saved restrictive report',
+      options: { permissionState: JSON.stringify(codexPermissionPolicy('ask-for-approval')) },
+      expected: 'ask-for-approval'
+    },
+    {
+      name: 'saved Full Access report',
+      options: { permissionState: JSON.stringify(codexPermissionPolicy('full-access')) },
+      expected: 'full-access'
+    },
+    {
+      name: 'recovery-effective policy',
+      options: {
+        permissions: 'full-access',
+        permissionRecovery: JSON.stringify({
+          desired: 'full-access',
+          effective: codexPermissionPolicy('ask-for-approval')
+        })
+      },
+      expected: 'ask-for-approval'
+    },
+    {
+      name: 'host-restricted default',
+      initial: true,
+      restricted: true,
+      options: {},
+      expected: 'ask-for-approval'
+    },
+    {
+      name: 'host-restricted saved report',
+      restricted: true,
+      options: { permissionState: JSON.stringify(codexPermissionPolicy('full-access')) },
+      expected: 'ask-for-approval'
+    },
+    {
+      name: 'required automatic review',
+      initial: true,
+      restricted: true,
+      autoReview: true,
+      options: { model: 'gpt-live' },
+      expected: 'approve-for-me'
+    },
+    { name: 'resumed conversation without policy', resumed: true, options: {}, expected: null }
+  ] as const)(
+    'carries $name through launch and acquisition without overriding conversation policy',
+    async (scenario) => {
+      const resumed = 'resumed' in scenario && scenario.resumed
+      const options: Record<string, string> = {}
+      for (const [key, value] of Object.entries(scenario.options)) {
+        if (typeof value === 'string') {
+          options[key] = value
+        }
+      }
+      const launch = await resolverFor(
+        record({
+          options,
+          providerHandleChain: resumed
+            ? [
+                codexProviderHandleLink({
+                  threadId: THREAD_ID,
+                  resumed: true,
+                  fence: 1,
+                  observedAt: 1
+                })
+              ]
+            : []
+        }),
+        undefined,
+        undefined,
+        'manual' in scenario ? { codex: '' } : {}
+      )({ identity: IDENTITY })
+      expect(launch.initialPermissions).toEqual(
+        'initial' in scenario ? codexPermissionPolicy('full-access') : undefined
+      )
+      const reported = codexPermissionPolicy(scenario.expected ?? 'ask-for-approval')
+      const codex = fakeCodex({
+        'model/list': () => ({
+          data: [
+            {
+              id: 'gpt-live',
+              model: 'gpt-live',
+              displayName: 'Live',
+              isDefault: true,
+              supportedReasoningEfforts: []
+            }
+          ],
+          nextCursor: null
+        }),
+        'configRequirements/read': () => ({
+          requirements:
+            'restricted' in scenario
+              ? {
+                  allowedApprovalPolicies: ['on-request'],
+                  allowedSandboxModes: ['workspace-write'],
+                  ...('autoReview' in scenario
+                    ? { autoReview: { requiredOnModels: ['gpt-live'] } }
+                    : {})
+                }
+              : null
+        }),
+        'thread/start': () => ({ thread: { id: THREAD_ID }, ...reported }),
+        'thread/resume': () => ({ thread: { id: THREAD_ID }, ...reported })
+      })
+      const adapter = adapterFor(codex, launch)
+      await adapter.acquire({
+        identity: identityFor(SESSION_ID),
+        fence: 7,
+        spawnToken: 'spawn-1',
+        options
+      })
+      const request = codex.connections[0]!.calls.find(
+        ({ method }) => method === (resumed ? 'thread/resume' : 'thread/start')
+      )!
+      if (scenario.expected === null) {
+        expect(request.params).not.toHaveProperty('approvalPolicy')
+        expect(request.params).not.toHaveProperty('sandbox')
+      } else {
+        expect(request.params).toMatchObject({
+          approvalPolicy: reported.approvalPolicy,
+          approvalsReviewer: reported.approvalsReviewer,
+          sandbox: scenario.expected === 'full-access' ? 'danger-full-access' : 'workspace-write'
+        })
+      }
+      const durable = await readNativeSessionOptions({
+        adapter,
+        sessionId: SESSION_ID,
+        fence: 7,
+        priorOptions: options
+      })
+      expect(durable?.permissionState).toBe(JSON.stringify(reported))
+    }
+  )
+
   it('launches the app server in the workspace and account home the record pinned', async () => {
     const launch = await resolverFor(record())({ identity: IDENTITY })
 

@@ -1,0 +1,16 @@
+name: Native chat WSL fork validation
+
+on:
+  push:
+    branches:
+      - feat/native-chat-permissions-and-files
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    if: github.repository == 'BenyaminBen/orca'
+    uses: ./.github/workflows/windows-wsl-e2e.yml
+    with:
+      ref: ${{ github.sha }}
