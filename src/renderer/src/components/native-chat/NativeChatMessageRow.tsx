@@ -171,6 +171,7 @@ export const MessageRow = memo(function MessageRow({
         blocks={prose}
         runtimeContext={runtimeContext}
         enablePreview={runtimeContext !== undefined}
+        compact={false}
       />
       {markdown ? (
         <CommentMarkdown

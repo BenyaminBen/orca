@@ -103,7 +103,8 @@ export async function readRuntimeFilePreview(
 export async function downloadRuntimeFile(
   context: RuntimeFileOperationArgs,
   filePath: string,
-  suggestedName: string
+  suggestedName: string,
+  postDownloadAction?: 'reveal'
 ): Promise<RuntimeFileDownloadResult> {
   assertExternalSshReadOwnership(
     context.settings,
@@ -116,18 +117,23 @@ export async function downloadRuntimeFile(
       throw new Error('Remote file is outside the owning runtime worktree')
     }
     if (context.connectionId) {
-      return window.api.fs.downloadFile({ filePath, connectionId: context.connectionId })
+      return window.api.fs.downloadFile({
+        filePath,
+        connectionId: context.connectionId,
+        postDownloadAction
+      })
     }
     const result = await readRuntimeFilePreview(context, filePath)
     return window.api.fs.saveDownloadedFile({
       suggestedName,
+      postDownloadAction,
       content: result.content,
       encoding: result.isBinary ? 'base64' : 'utf8'
     })
   }
 
   if (!(await remoteChunkedDownloadAvailable(remoteArgs))) {
-    return downloadRemoteFileViaPreview(remoteArgs, suggestedName)
+    return downloadRemoteFileViaPreview(remoteArgs, suggestedName, postDownloadAction)
   }
 
   const download = await window.api.fs.startDownloadedFile({ suggestedName })
@@ -154,7 +160,10 @@ export async function downloadRuntimeFile(
         throw new Error('Remote download stalled before reaching EOF')
       }
     }
-    const result = await window.api.fs.finishDownloadedFile({ transferId: download.transferId })
+    const result = await window.api.fs.finishDownloadedFile({
+      transferId: download.transferId,
+      postDownloadAction
+    })
     finished = true
     return result
   } finally {
@@ -209,7 +218,8 @@ async function readRemoteDownloadChunk(
 
 async function downloadRemoteFileViaPreview(
   remoteArgs: RemoteFileDownloadArgs,
-  suggestedName: string
+  suggestedName: string,
+  postDownloadAction?: 'reveal'
 ): Promise<RuntimeFileDownloadResult> {
   try {
     const result = await callRuntimeRpc<RuntimeFilePreviewResult>(
@@ -225,6 +235,7 @@ async function downloadRemoteFileViaPreview(
     }
     return window.api.fs.saveDownloadedFile({
       suggestedName,
+      postDownloadAction,
       content: result.content,
       encoding: result.isBinary ? 'base64' : 'utf8'
     })

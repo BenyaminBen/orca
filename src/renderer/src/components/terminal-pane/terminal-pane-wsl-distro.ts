@@ -3,6 +3,7 @@ import {
   getCachedWindowsTerminalCapabilities,
   hasCachedWindowsTerminalCapabilities
 } from '@/lib/windows-terminal-capabilities'
+import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { parseWslUncPath } from '../../../../shared/wsl-paths'
 
 type PaneWslDistroState = Parameters<typeof getLocalProjectExecutionRuntimeContext>[0]
@@ -17,6 +18,10 @@ export function resolvePaneWslDistro(
   worktreeId: string,
   worktreePath: string
 ): string | null {
+  // Folder workspaces have no project runtime preference, so their root is the only local owner.
+  if (parseWorkspaceKey(worktreeId)?.type === 'folder') {
+    return parseWslUncPath(worktreePath)?.distro ?? null
+  }
   const capabilities = hasCachedWindowsTerminalCapabilities()
     ? getCachedWindowsTerminalCapabilities()
     : null

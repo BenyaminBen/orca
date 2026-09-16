@@ -1,6 +1,8 @@
 import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client'
 import type { TreeNode } from './file-explorer-types'
 
+type RemoteDownloadTarget = Pick<TreeNode, 'isDirectory'>
+
 export function shouldShowCollapseFolderAction(node: TreeNode, isExpanded: boolean): boolean {
   return node.isDirectory && isExpanded
 }
@@ -17,8 +19,8 @@ export function shouldShowViewFileAction(node: TreeNode): boolean {
   return !node.isDirectory
 }
 
-export function shouldShowRemoteDownloadAction(
-  node: TreeNode,
+export function shouldShowRemoteDownloadAction<TTarget extends RemoteDownloadTarget>(
+  node: TTarget,
   connectionId?: string | null,
   runtimeDownloadContext?: RuntimeFileOperationArgs | null,
   // Why: fail closed — only show folder download when the connection explicitly

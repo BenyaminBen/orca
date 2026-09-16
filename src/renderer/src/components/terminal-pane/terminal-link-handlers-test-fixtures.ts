@@ -11,6 +11,7 @@ export type TerminalLinkStoreState = {
   setActiveWorktree: Mock
   createBrowserTab: Mock
   openFile: Mock
+  revealInExplorer: Mock
   setPendingEditorReveal: Mock
   setMarkdownViewMode: Mock
   activeFileIdByWorktree: Record<string, string | null>
@@ -59,6 +60,7 @@ export function createTerminalLinkTestDoubles(): TerminalLinkTestDoubles {
     setActiveWorktree: setActiveWorktreeMock,
     createBrowserTab: createBrowserTabMock,
     openFile: openFileMock,
+    revealInExplorer: vi.fn(),
     setPendingEditorReveal: setPendingEditorRevealMock,
     setMarkdownViewMode: setMarkdownViewModeMock,
     activeFileIdByWorktree: {} as Record<string, string | null>,

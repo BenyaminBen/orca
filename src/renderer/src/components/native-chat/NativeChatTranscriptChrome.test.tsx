@@ -32,15 +32,19 @@ beforeEach(() => {
   let urlSequence = 0
   vi.spyOn(URL, 'createObjectURL').mockImplementation(() => `blob:owner-${++urlSequence}`)
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
-  window.api = {
-    fs: {
-      readFile: vi.fn().mockResolvedValue({
-        content: 'AA==',
-        isBinary: true,
-        mimeType: 'image/png'
-      })
+  Object.defineProperty(window, 'api', {
+    configurable: true,
+    value: {
+      fs: {
+        authorizeExternalPath: vi.fn().mockResolvedValue(undefined),
+        readFile: vi.fn().mockResolvedValue({
+          content: 'AA==',
+          isBinary: true,
+          mimeType: 'image/png'
+        })
+      }
     }
-  } as unknown as Window['api']
+  })
 })
 
 afterEach(() => {
@@ -50,6 +54,36 @@ afterEach(() => {
 })
 
 describe('NativeChatImageAttachments', () => {
+  it('previews a generated image outside the workspace without a prior file-open grant', async () => {
+    const savedPath = '/home/user/.codex/generated_images/session/generated.png'
+    const grantedPaths = new Set<string>()
+    window.api.fs.authorizeExternalPath = vi.fn(async ({ targetPath }) => {
+      grantedPaths.add(targetPath)
+    })
+    vi.mocked(window.api.fs.readFile).mockImplementation(async ({ filePath }) => {
+      if (!grantedPaths.has(filePath)) {
+        throw new Error('Access denied: path resolves outside allowed directories')
+      }
+      return { content: 'AA==', isBinary: true, mimeType: 'image/png' }
+    })
+    const container = document.createElement('div')
+    const root = createRoot(container)
+    try {
+      await act(async () => {
+        root.render(
+          createElement(NativeChatImageAttachments, {
+            blocks: [{ type: 'image-ref', path: savedPath }],
+            runtimeContext: runtimeContext('wt-1')
+          })
+        )
+        await flushPromises()
+      })
+      expect(container.querySelector('img')?.getAttribute('src')).toBe('blob:owner-1')
+    } finally {
+      await act(async () => root.unmount())
+    }
+  })
+
   it('pools visibility observation across image refs', async () => {
     class FakeIntersectionObserver {
       static instances: FakeIntersectionObserver[] = []

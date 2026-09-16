@@ -49,15 +49,18 @@ export type FilesystemApi = {
     downloadFile: (args: {
       filePath: string
       connectionId: string
+      postDownloadAction?: 'reveal'
     }) => Promise<{ canceled: true } | { canceled: false; destinationPath: string }>
     downloadFolder: (args: {
       dirPath: string
       connectionId: string
+      postDownloadAction?: 'reveal'
     }) => Promise<{ canceled: true } | { canceled: false; destinationPath: string }>
     saveDownloadedFile: (args: {
       suggestedName: string
       content: string
       encoding: 'utf8' | 'base64'
+      postDownloadAction?: 'reveal'
     }) => Promise<{ canceled: true } | { canceled: false; destinationPath: string }>
     startDownloadedFile: (args: {
       suggestedName: string
@@ -70,6 +73,7 @@ export type FilesystemApi = {
     }) => Promise<{ ok: true }>
     finishDownloadedFile: (args: {
       transferId: string
+      postDownloadAction?: 'reveal'
     }) => Promise<{ canceled: false; destinationPath: string }>
     cancelDownloadedFile: (args: { transferId: string }) => Promise<{ ok: true }>
     listMarkdownDocuments: (args: {

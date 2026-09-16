@@ -4,6 +4,7 @@ import {
 } from '../../../../shared/native-chat-href-routing'
 import { parseFileLinkLocation } from '../../../../shared/file-link-location'
 import { extractTerminalFileLinks, type ParsedTerminalFileLink } from '@/lib/terminal-links'
+import { isTerminalBareFilename } from '@/lib/terminal-bare-file-link-detection'
 
 type MarkdownNode = {
   type: string
@@ -14,16 +15,21 @@ type MarkdownNode = {
 
 const ROOTED_PATH_PREFIX_PATTERN = /^(?:~[\\/]|\.{1,2}[\\/]|[\\/]|[A-Za-z]:[\\/])/
 
-function isLinkifiableFile(link: ParsedTerminalFileLink, requireSeparator: boolean): boolean {
+function isLinkifiableFile(link: ParsedTerminalFileLink): boolean {
   const hasRootedPrefix = ROOTED_PATH_PREFIX_PATTERN.test(link.pathText)
   const hasLineSuffix = link.line !== null || link.column !== null
   const hasAlphabeticExtension = /\.[\p{L}][\p{L}\p{N}\p{M}_+-]*$/u.test(link.pathText)
   const hasPathExtension = /\.[\p{L}\p{N}][\p{L}\p{N}\p{M}_+-]*$/u.test(link.pathText)
+  const hasDirectorySuffix = /[\\/]$/.test(link.pathText)
+  const hasBareProjectName =
+    (!link.pathText.includes('.') || link.pathText.startsWith('.')) &&
+    isTerminalBareFilename(link.pathText)
   return (
-    (!requireSeparator || /[\\/]/.test(link.pathText)) &&
     (hasRootedPrefix ||
       hasLineSuffix ||
-      (requireSeparator ? hasPathExtension : hasAlphabeticExtension)) &&
+      hasDirectorySuffix ||
+      hasBareProjectName ||
+      (/[\\/]/.test(link.pathText) ? hasPathExtension : hasAlphabeticExtension)) &&
     routeNativeChatHref(link.displayText).kind === 'file'
   )
 }
@@ -95,7 +101,7 @@ function splitProseJoinedLinks(link: ParsedTerminalFileLink): ParsedTerminalFile
     const exactLink = extractTerminalFileLinks(token).find(
       (candidate) => candidate.startIndex === 0 && candidate.endIndex === token.length
     )
-    if (exactLink && isLinkifiableFile(exactLink, true)) {
+    if (exactLink && isLinkifiableFile(exactLink)) {
       const startIndex = link.startIndex + (match.index ?? 0)
       tokenLinks.push({ ...exactLink, startIndex, endIndex: startIndex + token.length })
     }
@@ -107,7 +113,7 @@ function splitProseJoinedLinks(link: ParsedTerminalFileLink): ParsedTerminalFile
 function splitTextSegment(value: string): MarkdownNode[] {
   const links = extractTerminalFileLinks(value)
     .filter((link) => !hasPartialPathBoundary(value, link))
-    .filter((link) => isLinkifiableFile(link, true))
+    .filter(isLinkifiableFile)
     .flatMap(splitProseJoinedLinks)
   if (links.length === 0) {
     return [{ type: 'text', value }]
@@ -154,10 +160,10 @@ function exactFileLink(value: string, allowSpacedRelative: boolean): ParsedTermi
   const exactLink = extractTerminalFileLinks(value).find(
     (link) => link.startIndex === 0 && link.endIndex === value.length
   )
-  if (exactLink && isLinkifiableFile(exactLink, false)) {
+  if (exactLink && isLinkifiableFile(exactLink)) {
     return exactLink
   }
-  if (!allowSpacedRelative || !/\s/.test(value)) {
+  if (!allowSpacedRelative || (!/\s/.test(value) && !/[\\/]$/.test(value))) {
     return null
   }
   const parsed = parseFileLinkLocation(value)
@@ -177,7 +183,7 @@ function exactFileLink(value: string, allowSpacedRelative: boolean): ParsedTermi
     endIndex: value.length,
     displayText: value
   }
-  return isLinkifiableFile(explicitLink, false) ? explicitLink : null
+  return isLinkifiableFile(explicitLink) ? explicitLink : null
 }
 
 function splitTextNode(value: string): MarkdownNode[] {

@@ -16,7 +16,8 @@ const {
   authorizeExternalPathMock,
   statMock,
   openFileMock,
-  setPendingEditorRevealMock
+  setPendingEditorRevealMock,
+  runtimeEnvironmentCallMock
 } = doubles
 
 vi.mock('@/store', () => ({
@@ -180,17 +181,32 @@ describe('createFilePathLinkProvider range bounds', () => {
   it('ignores the pane WSL distro for remote runtime panes', async () => {
     setPlatform('Windows')
     storeState.settings = { activeRuntimeEnvironmentId: 'env-2' }
+    runtimeEnvironmentCallMock.mockResolvedValueOnce({
+      id: 'rpc-1',
+      ok: true,
+      result: { size: 1, isDirectory: false, mtime: 1 },
+      _meta: { runtimeId: 'remote-runtime' }
+    })
 
     openDetectedFilePath('/home/alice/notes.md', null, null, {
       worktreeId: 'wt-1',
-      worktreePath: 'C:\\repo',
+      worktreePath: '/home/alice',
       wslDistro: 'Ubuntu',
       runtimeEnvironmentId: 'env-1'
     })
     await flushAsyncWork()
 
-    expect(authorizeExternalPathMock).toHaveBeenCalledWith({
-      targetPath: '/home/alice/notes.md'
+    expect(authorizeExternalPathMock).not.toHaveBeenCalled()
+    expect(statMock).not.toHaveBeenCalled()
+    expect(runtimeEnvironmentCallMock).toHaveBeenCalledWith({
+      selector: 'env-1',
+      method: 'files.stat',
+      params: { worktree: 'id:wt-1', relativePath: 'notes.md' },
+      timeoutMs: 15_000
     })
+    expect(openFileMock).toHaveBeenCalledWith(
+      expect.objectContaining({ filePath: '/home/alice/notes.md', runtimeEnvironmentId: 'env-1' }),
+      { forceContentReload: true }
+    )
   })
 })
