@@ -15,6 +15,7 @@ import {
   createSiblingTransferPath,
   type DownloadFileResult
 } from './filesystem-download-promotion'
+import { completeDownload, validatePostDownloadAction } from './filesystem-download-completion'
 
 function validateRequiredString(value: unknown, label: string): string {
   if (typeof value !== 'string' || value.trim() === '') {
@@ -23,17 +24,23 @@ function validateRequiredString(value: unknown, label: string): string {
   return value
 }
 
-export function registerFilesystemDownloadHandlers(context: FilesystemHandlerContext): void {
+export function registerFilesystemDownloadHandlers(
+  context: Pick<
+    FilesystemHandlerContext,
+    'downloadSessions' | 'closeDownloadSession' | 'cleanupDownloadSessionsForSender'
+  >
+): void {
   const { downloadSessions, closeDownloadSession, cleanupDownloadSessionsForSender } = context
 
   ipcMain.handle(
     'fs:downloadFile',
     async (
       event,
-      args: { filePath?: string; connectionId?: string }
+      args: { filePath?: string; connectionId?: string; postDownloadAction?: 'reveal' }
     ): Promise<DownloadFileResult> => {
       const filePath = validateRequiredString(args?.filePath, 'filePath')
       const connectionId = validateRequiredString(args?.connectionId, 'connectionId')
+      const action = validatePostDownloadAction(args?.postDownloadAction)
       const provider = requireSshFilesystemProvider(connectionId)
       const remoteStat = await provider.stat(filePath)
       if (remoteStat.type === 'directory') {
@@ -61,7 +68,7 @@ export function registerFilesystemDownloadHandlers(context: FilesystemHandlerCon
         await provider.downloadFile(filePath, tempPath)
         await promoteDownloadedFile(tempPath, destinationPath, existed)
         promoted = true
-        return { canceled: false, destinationPath }
+        return completeDownload(destinationPath, action)
       } finally {
         if (!promoted) {
           await cleanupLocalTransferPath(tempPath)
@@ -76,7 +83,12 @@ export function registerFilesystemDownloadHandlers(context: FilesystemHandlerCon
     'fs:saveDownloadedFile',
     async (
       event,
-      args: { suggestedName?: string; content?: string; encoding?: 'utf8' | 'base64' }
+      args: {
+        suggestedName?: string
+        content?: string
+        encoding?: 'utf8' | 'base64'
+        postDownloadAction?: 'reveal'
+      }
     ): Promise<DownloadFileResult> => {
       const suggestedName = sanitizeLocalDownloadFilename(
         validateRequiredString(args?.suggestedName, 'suggestedName')
@@ -85,6 +97,7 @@ export function registerFilesystemDownloadHandlers(context: FilesystemHandlerCon
         throw new Error('content is required')
       }
       const content = args.content
+      const action = validatePostDownloadAction(args?.postDownloadAction)
       const encoding = args?.encoding === 'base64' ? 'base64' : 'utf8'
       const parentWindow = BrowserWindow.fromWebContents(event.sender) ?? undefined
       const dialogResult = parentWindow
@@ -102,7 +115,7 @@ export function registerFilesystemDownloadHandlers(context: FilesystemHandlerCon
         await writeFile(tempPath, decodeDownloadedFileContent(content, encoding))
         await promoteDownloadedFile(tempPath, destinationPath, existed)
         promoted = true
-        return { canceled: false, destinationPath }
+        return completeDownload(destinationPath, action)
       } finally {
         if (!promoted) {
           await cleanupLocalTransferPath(tempPath)
@@ -181,9 +194,10 @@ export function registerFilesystemDownloadHandlers(context: FilesystemHandlerCon
     'fs:finishDownloadedFile',
     async (
       _event,
-      args: { transferId?: string }
+      args: { transferId?: string; postDownloadAction?: 'reveal' }
     ): Promise<{ canceled: false; destinationPath: string }> => {
       const transferId = validateRequiredString(args?.transferId, 'transferId')
+      const action = validatePostDownloadAction(args?.postDownloadAction)
       const session = await closeDownloadSession(transferId, false)
       if (!session) {
         throw new Error('Download session not found')
@@ -196,7 +210,7 @@ export function registerFilesystemDownloadHandlers(context: FilesystemHandlerCon
           session.destinationExisted
         )
         promoted = true
-        return { canceled: false, destinationPath: session.destinationPath }
+        return completeDownload(session.destinationPath, action)
       } finally {
         if (!promoted) {
           await cleanupLocalTransferPath(session.tempPath)

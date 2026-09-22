@@ -5,7 +5,7 @@ import { useNativeChatLaunchDraftSignal } from './use-native-chat-launch-draft-a
 import { useNativeChatRetainedSession } from './use-native-chat-retained-session'
 import { isNativeChatTranscriptUnsettled } from './use-native-chat-live-session'
 import { selectNativeChatViewState } from './native-chat-view-state'
-import { NativeChatMessageList } from './NativeChatMessageList'
+import { NativeChatImageScopedMessageList } from './NativeChatImageScopedMessageList'
 import { NativeChatComposer, type NativeChatComposerHandle } from './NativeChatComposer'
 import { useNativeChatFontScale } from './use-native-chat-font-scale'
 import { useNativeChatCanSend } from './use-native-chat-can-send'
@@ -53,6 +53,7 @@ import { LinkActionPopover } from '@/components/link-actions/LinkActionPopover'
 import { useNativeChatLinkActions } from './use-native-chat-link-actions'
 import type { NativeChatResolvedViewProps } from './native-chat-view-types'
 import { useNativeChatFileLinkContext } from './use-native-chat-file-link-context'
+import { useNativeChatImageRuntimeContext } from './native-chat-image-runtime-context'
 import { matchNativeChatSplitShortcut } from './native-chat-split-shortcut'
 import { getShortcutPlatform } from '@/lib/shortcut-platform'
 import { formatShortcutLabel } from '@/hooks/useShortcutLabel'
@@ -128,6 +129,7 @@ export function NativeChatResolvedView({
   // replaces the composer.
   const questionAnswerInputRef = useRef<HTMLInputElement>(null)
   const fileLinkContext = useNativeChatFileLinkContext(terminalTabId)
+  const imageRuntimeContext = useNativeChatImageRuntimeContext(terminalTabId)
   const pasteClipboardIntoComposer = useNativeChatPasteBridge({
     rootRef,
     composerRef,
@@ -398,7 +400,7 @@ export function NativeChatResolvedView({
         ) : viewState.kind === 'empty' ? (
           <NativeChatEmptyState kind="empty" agent={agent} />
         ) : (
-          <NativeChatMessageList
+          <NativeChatImageScopedMessageList
             session={sessionWithPending}
             isVisible={isVisible}
             isWorking={isWorking}
@@ -408,6 +410,7 @@ export function NativeChatResolvedView({
             showTurnStatus={false}
             onLinkClick={onLinkClick}
             allowFileUriLinks={fileLinkContext !== null}
+            runtimeContext={imageRuntimeContext}
             failedDeliveryMessageIds={failedLaunchPromptMessageIds}
           />
         )}

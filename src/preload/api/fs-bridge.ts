@@ -53,17 +53,20 @@ export const fsApi = {
   downloadFile: (args: {
     filePath: string
     connectionId: string
+    postDownloadAction?: 'reveal'
   }): Promise<{ canceled: true } | { canceled: false; destinationPath: string }> =>
     ipcRenderer.invoke('fs:downloadFile', args),
   downloadFolder: (args: {
     dirPath: string
     connectionId: string
+    postDownloadAction?: 'reveal'
   }): Promise<{ canceled: true } | { canceled: false; destinationPath: string }> =>
     ipcRenderer.invoke('fs:downloadFolder', args),
   saveDownloadedFile: (args: {
     suggestedName: string
     content: string
     encoding: 'utf8' | 'base64'
+    postDownloadAction?: 'reveal'
   }): Promise<{ canceled: true } | { canceled: false; destinationPath: string }> =>
     ipcRenderer.invoke('fs:saveDownloadedFile', args),
   startDownloadedFile: (args: {
@@ -77,6 +80,7 @@ export const fsApi = {
   }): Promise<{ ok: true }> => ipcRenderer.invoke('fs:appendDownloadedFileChunk', args),
   finishDownloadedFile: (args: {
     transferId: string
+    postDownloadAction?: 'reveal'
   }): Promise<{ canceled: false; destinationPath: string }> =>
     ipcRenderer.invoke('fs:finishDownloadedFile', args),
   cancelDownloadedFile: (args: { transferId: string }): Promise<{ ok: true }> =>

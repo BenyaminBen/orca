@@ -3,7 +3,7 @@ import { verifyWslParticipation, WSL_TEST_TITLES } from './verify-wsl-e2e-partic
 
 function report() {
   return {
-    stats: { expected: 9, skipped: 0, unexpected: 0, flaky: 0 },
+    stats: { expected: 21, skipped: 0, unexpected: 0, flaky: 0 },
     suites: [
       {
         suites: [
@@ -23,7 +23,7 @@ function report() {
 }
 
 describe('WSL participation', () => {
-  it('accepts all three named scenarios executed three times', () => {
+  it('accepts all seven named scenarios executed three times', () => {
     expect(() => verifyWslParticipation(report())).not.toThrow()
   })
   it.each(['skipped', 'unexpected', 'flaky'])('rejects a nonzero %s result', (key) => {
@@ -31,7 +31,7 @@ describe('WSL participation', () => {
     value.stats[key] = 1
     expect(() => verifyWslParticipation(value)).toThrow('participation failed')
   })
-  it('rejects missing scenarios even when aggregate counts claim nine passes', () => {
+  it('rejects missing scenarios even when aggregate counts claim 21 passes', () => {
     const value = report()
     value.suites[0].suites[0].specs.pop()
     expect(() => verifyWslParticipation(value)).toThrow('requires three executions')

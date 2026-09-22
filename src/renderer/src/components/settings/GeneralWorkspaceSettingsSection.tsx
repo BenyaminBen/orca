@@ -197,6 +197,35 @@ export function GeneralWorkspaceSettingsSection({
         </SearchableSetting>
       </div>
 
+      <div id="general-full-access-confirm" className="scroll-mt-6">
+        <SearchableSetting
+          title={translate(
+            'settings.general.fullAccessConfirmation',
+            'Ask Before Enabling Full Access'
+          )}
+          description={translate(
+            'settings.general.fullAccessConfirmationDescription',
+            'Confirm before a chat switches to unrestricted commands and network access.'
+          )}
+          keywords={['permissions', 'full access', 'confirm', 'sandbox', 'approval']}
+        >
+          <SettingsSwitchRow
+            label={translate(
+              'settings.general.fullAccessConfirmation',
+              'Ask Before Enabling Full Access'
+            )}
+            description={translate(
+              'settings.general.fullAccessConfirmationDescription',
+              'Confirm before a chat switches to unrestricted commands and network access.'
+            )}
+            checked={!settings.skipFullAccessConfirm}
+            onChange={() =>
+              updateSettings({ skipFullAccessConfirm: !settings.skipFullAccessConfirm })
+            }
+          />
+        </SearchableSetting>
+      </div>
+
       <div
         id="general-open-in-apps"
         data-settings-section="general-open-in-apps"

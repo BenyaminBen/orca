@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { projectStructuredAgentSessionStatus } from '../../../../shared/structured-agent-session-projection'
 import * as structuredConversationCommands from './structured-conversation-command-send'
 import type { AgentSessionPromptResult } from '../../../../shared/agent-session-wire'
 import { useStructuredAgentSessionOutbox } from './use-structured-agent-session-outbox'
@@ -38,18 +39,31 @@ export function useStructuredAgentSession(args: {
       enabled: transportEnabled
     })
   const commandPending = useRef(false)
+  const stateRef = useRef(state)
+  stateRef.current = state
   const transportState = useStructuredAgentSessionTransportState(state, transportEnabled)
-  const { conversationCommands, optionSnapshot, optionSurface, setStructuredOption } =
-    useStructuredAgentSessionOptions({
-      agent,
-      sessionId,
-      target,
-      transportEnabled,
-      providerVisible,
-      fence: state.fence,
-      turnId: transportState.turnId,
-      mutate
-    })
+  const {
+    conversationCommands,
+    optionSnapshot,
+    optionSurface,
+    setStructuredOption,
+    hasPendingOptionMutation
+  } = useStructuredAgentSessionOptions({
+    agent,
+    sessionId,
+    target,
+    transportEnabled,
+    providerVisible,
+    fence: state.fence,
+    turnId: transportState.turnId,
+    mutate,
+    isConversationIdle: () =>
+      projectStructuredAgentSessionStatus(
+        stateRef.current.items,
+        stateRef.current.submissions,
+        stateRef.current.fence
+      ) === 'idle'
+  })
   const outboxController = useStructuredAgentSessionOutbox({
     sessionId,
     target,
@@ -96,7 +110,7 @@ export function useStructuredAgentSession(args: {
     outbox,
     blockedClientMessageId: outboxController.blockedClientMessageId,
     send: (...input: Parameters<typeof outboxController.send>) =>
-      !commandPending.current && outboxController.send(...input),
+      !commandPending.current && !hasPendingOptionMutation() && outboxController.send(...input),
     retry: outboxController.retry,
     isWorking: transportState.isWorking,
     workingStartedAt: transportState.turnTiming.workingStartedAt,

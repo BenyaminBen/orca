@@ -59,6 +59,7 @@ import {
 } from '../../../../shared/native-chat-session-option-defaults'
 import type { PersistedNativeChatSessionOptions } from '../../../../shared/native-chat-session-options'
 import { useStructuredAgentSession } from './use-structured-agent-session'
+import { CODEX_PERMISSION_MODES, codexPermissionPolicy } from '../../../../shared/codex-permissions'
 
 /** Replay every host mutation in order, exactly as the runtime does. */
 function seededByNextLaunch(): Record<string, string> | undefined {
@@ -177,6 +178,17 @@ describe('useStructuredAgentSession working state', () => {
   })
 })
 
+function renderLocalSessionOptions() {
+  return renderHook(() =>
+    useStructuredAgentSession({
+      sessionId: 'session-1',
+      target: LOCAL_TARGET,
+      agent: 'codex',
+      isVisible: true
+    })
+  )
+}
+
 describe('useStructuredAgentSession options', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -189,6 +201,44 @@ describe('useStructuredAgentSession options', () => {
     mocks.call.mockImplementation((_target, method) =>
       method === 'agentSession.options' ? Promise.resolve(OPTIONS) : Promise.resolve(null)
     )
+  })
+
+  it('keeps a permission pick out of future-chat defaults even when the provider returns model values', async () => {
+    items = []
+    let changed = false
+    mocks.call.mockImplementation((_target, method) => {
+      if (method === 'agentSession.options') {
+        return Promise.resolve({
+          ...OPTIONS,
+          permissions: {
+            current: 'ask-for-approval',
+            policy: codexPermissionPolicy('ask-for-approval'),
+            ...(changed ? { pending: 'full-access' } : {}),
+            choices: CODEX_PERMISSION_MODES.map(({ value }) => ({ value }))
+          }
+        })
+      }
+      changed = true
+      return Promise.resolve({
+        ok: true,
+        value: {
+          key: 'permissions',
+          value: 'full-access',
+          options: { model: 'gpt-live', effort: 'medium', permissions: 'full-access' }
+        }
+      })
+    })
+    const { result } = renderLocalSessionOptions()
+    await waitFor(() =>
+      expect(result.current.optionSnapshot.find(({ id }) => id === 'permissions')?.settable).toBe(
+        true
+      )
+    )
+    await act(async () => {
+      expect(await result.current.setStructuredOption('permissions', 'full-access')).toBe(true)
+    })
+    expect(mocks.enqueueSettingsWrite).not.toHaveBeenCalled()
+    expect(seededByNextLaunch()).toBeUndefined()
   })
 
   it('applies provider-reconciled values after a model change', async () => {
@@ -209,15 +259,8 @@ describe('useStructuredAgentSession options', () => {
         }
       })
     })
-    const { result } = renderHook(() =>
-      useStructuredAgentSession({
-        sessionId: 'session-1',
-        target: LOCAL_TARGET,
-        agent: 'codex',
-        isVisible: true
-      })
-    )
-    await waitFor(() => expect(result.current.optionSnapshot).toHaveLength(2))
+    const { result } = renderLocalSessionOptions()
+    await waitFor(() => expect(result.current.optionSnapshot).toHaveLength(3))
 
     await act(async () => {
       expect(await result.current.setStructuredOption('model', 'gpt-fast')).toBe(true)
@@ -241,15 +284,8 @@ describe('useStructuredAgentSession options', () => {
         ? Promise.resolve(OPTIONS)
         : Promise.reject(new Error('provider rejected option'))
     )
-    const { result } = renderHook(() =>
-      useStructuredAgentSession({
-        sessionId: 'session-1',
-        target: LOCAL_TARGET,
-        agent: 'codex',
-        isVisible: true
-      })
-    )
-    await waitFor(() => expect(result.current.optionSnapshot).toHaveLength(2))
+    const { result } = renderLocalSessionOptions()
+    await waitFor(() => expect(result.current.optionSnapshot).toHaveLength(3))
 
     await act(async () => {
       expect(await result.current.setStructuredOption('model', 'gpt-fast')).toBe(false)
@@ -288,15 +324,8 @@ describe('useStructuredAgentSession options', () => {
             }
       )
     })
-    const { result } = renderHook(() =>
-      useStructuredAgentSession({
-        sessionId: 'session-1',
-        target: LOCAL_TARGET,
-        agent: 'codex',
-        isVisible: true
-      })
-    )
-    await waitFor(() => expect(result.current.optionSnapshot).toHaveLength(2))
+    const { result } = renderLocalSessionOptions()
+    await waitFor(() => expect(result.current.optionSnapshot).toHaveLength(3))
 
     await act(async () => {
       expect(await result.current.setStructuredOption('model', 'gpt-fast')).toBe(false)
@@ -343,22 +372,15 @@ describe('useStructuredAgentSession options', () => {
             }
       )
     })
-    const { result, rerender } = renderHook(() =>
-      useStructuredAgentSession({
-        sessionId: 'session-1',
-        target: LOCAL_TARGET,
-        agent: 'codex',
-        isVisible: true
-      })
-    )
-    await waitFor(() => expect(result.current.optionSnapshot).toHaveLength(2))
+    const { result, rerender } = renderLocalSessionOptions()
+    await waitFor(() => expect(result.current.optionSnapshot).toHaveLength(3))
 
     await act(async () => {
       expect(await result.current.setStructuredOption('model', 'gpt-fast')).toBe(false)
     })
     fence = 4
     rerender()
-    await waitFor(() => expect(result.current.optionSnapshot).toHaveLength(2))
+    await waitFor(() => expect(result.current.optionSnapshot).toHaveLength(3))
     await act(async () => {
       expect(await result.current.setStructuredOption('model', 'gpt-fast')).toBe(true)
     })
@@ -389,15 +411,8 @@ describe('useStructuredAgentSession options', () => {
     mocks.call.mockImplementation((_target, method) =>
       method === 'agentSession.options' ? Promise.resolve(OPTIONS) : pending
     )
-    const { result, rerender } = renderHook(() =>
-      useStructuredAgentSession({
-        sessionId: 'session-1',
-        target: LOCAL_TARGET,
-        agent: 'codex',
-        isVisible: true
-      })
-    )
-    await waitFor(() => expect(result.current.optionSnapshot).toHaveLength(2))
+    const { result, rerender } = renderLocalSessionOptions()
+    await waitFor(() => expect(result.current.optionSnapshot).toHaveLength(3))
     let setting!: Promise<boolean>
     act(() => {
       setting = result.current.setStructuredOption('model', 'gpt-fast')
@@ -462,15 +477,8 @@ describe('useStructuredAgentSession options', () => {
             }
           })
     )
-    const { result } = renderHook(() =>
-      useStructuredAgentSession({
-        sessionId: 'session-1',
-        target: LOCAL_TARGET,
-        agent: 'codex',
-        isVisible: true
-      })
-    )
-    await waitFor(() => expect(result.current.optionSnapshot).toHaveLength(2))
+    const { result } = renderLocalSessionOptions()
+    await waitFor(() => expect(result.current.optionSnapshot).toHaveLength(3))
 
     await act(async () => {
       expect(await result.current.setStructuredOption('model', 'gpt-fast')).toBe(true)
@@ -505,7 +513,7 @@ describe('useStructuredAgentSession options', () => {
         isVisible: true
       })
     )
-    await waitFor(() => expect(result.current.optionSnapshot).toHaveLength(2))
+    await waitFor(() => expect(result.current.optionSnapshot).toHaveLength(3))
 
     await act(async () => {
       expect(await result.current.setStructuredOption('effort', 'high')).toBe(true)
@@ -526,15 +534,8 @@ describe('useStructuredAgentSession options', () => {
             value: { key: 'effort', value: 'high', options: { effort: 'high' } }
           })
     )
-    const { result } = renderHook(() =>
-      useStructuredAgentSession({
-        sessionId: 'session-1',
-        target: LOCAL_TARGET,
-        agent: 'codex',
-        isVisible: true
-      })
-    )
-    await waitFor(() => expect(result.current.optionSnapshot).toHaveLength(2))
+    const { result } = renderLocalSessionOptions()
+    await waitFor(() => expect(result.current.optionSnapshot).toHaveLength(3))
 
     await act(async () => {
       expect(await result.current.setStructuredOption('effort', 'high')).toBe(true)
@@ -550,15 +551,8 @@ describe('useStructuredAgentSession options', () => {
         ? Promise.resolve(OPTIONS)
         : Promise.reject(new Error('provider rejected option'))
     )
-    const { result } = renderHook(() =>
-      useStructuredAgentSession({
-        sessionId: 'session-1',
-        target: LOCAL_TARGET,
-        agent: 'codex',
-        isVisible: true
-      })
-    )
-    await waitFor(() => expect(result.current.optionSnapshot).toHaveLength(2))
+    const { result } = renderLocalSessionOptions()
+    await waitFor(() => expect(result.current.optionSnapshot).toHaveLength(3))
 
     await act(async () => {
       expect(await result.current.setStructuredOption('model', 'gpt-fast')).toBe(false)
@@ -597,7 +591,7 @@ describe('useStructuredAgentSession options', () => {
         isVisible: true
       })
     )
-    await waitFor(() => expect(legacy.result.current.optionSnapshot).toHaveLength(2))
+    await waitFor(() => expect(legacy.result.current.optionSnapshot).toHaveLength(3))
     expect(legacy.result.current.optionSnapshot.some((entry) => entry.id === 'fastMode')).toBe(
       false
     )
@@ -622,15 +616,8 @@ describe('useStructuredAgentSession options', () => {
         }
       })
     })
-    const { result } = renderHook(() =>
-      useStructuredAgentSession({
-        sessionId: 'session-1',
-        target: LOCAL_TARGET,
-        agent: 'codex',
-        isVisible: true
-      })
-    )
-    await waitFor(() => expect(result.current.optionSnapshot).toHaveLength(3))
+    const { result } = renderLocalSessionOptions()
+    await waitFor(() => expect(result.current.optionSnapshot).toHaveLength(4))
 
     await act(async () => {
       expect(await result.current.setStructuredOption('fastMode', true)).toBe(true)
@@ -683,15 +670,8 @@ describe('useStructuredAgentSession options', () => {
         }
       })
     })
-    const { result, rerender } = renderHook(() =>
-      useStructuredAgentSession({
-        sessionId: 'session-1',
-        target: LOCAL_TARGET,
-        agent: 'codex',
-        isVisible: true
-      })
-    )
-    await waitFor(() => expect(result.current.optionSnapshot).toHaveLength(3))
+    const { result, rerender } = renderLocalSessionOptions()
+    await waitFor(() => expect(result.current.optionSnapshot).toHaveLength(4))
     items = [
       {
         itemId: 'turn-status',

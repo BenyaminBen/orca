@@ -23,10 +23,10 @@ const EXTENSIONLESS_FILENAMES = new Set([
   'CONTRIBUTING'
 ])
 
-const BARE_FILENAME_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9._+-]*$/
+const BARE_FILENAME_PATTERN = /^[A-Za-z0-9_.][A-Za-z0-9._+-]*$/
 const MAX_BARE_FILENAME_TOKEN_LENGTH = 120
 
-function looksLikeFilename(token: string): boolean {
+export function isTerminalBareFilename(token: string): boolean {
   if (token.length < 2 || token.length > 100) {
     return false
   }
@@ -59,7 +59,7 @@ export function detectBareFilenameLinks(
       continue
     }
     const link = toParsedTerminalFileLink(range)
-    if (!link || !looksLikeFilename(link.pathText)) {
+    if (!link || !isTerminalBareFilename(link.pathText)) {
       continue
     }
     links.push(link)

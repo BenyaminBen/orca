@@ -1,4 +1,13 @@
 import type { ProjectExecutionRuntimeResolution } from '../../../shared/project-execution-runtime'
+import {
+  getCachedWindowsTerminalCapabilities,
+  hasCachedWindowsTerminalCapabilities
+} from './windows-terminal-capabilities'
+
+export type LocalProjectRuntimeWslContext = {
+  wslAvailable?: boolean
+  availableWslDistros?: readonly string[] | null
+}
 
 export type LocalPreflightContext =
   | {
@@ -18,6 +27,19 @@ const PROJECT_RUNTIME_PREFLIGHT_CONTEXT_CACHE_MAX = 2048
 // keeps cache hits read-only instead of adding Map mutations to every store update.
 const wslPreflightContextsByDistro = new Map<string, NonNullable<LocalPreflightContext>>()
 const projectRuntimePreflightContextsByKey = new Map<string, NonNullable<LocalPreflightContext>>()
+
+export function getCachedLocalProjectRuntimeWslContext(): LocalProjectRuntimeWslContext {
+  // Why: preflight selectors are synchronous. Reuse an existing capability
+  // answer when available without spawning WSL probes from store reads.
+  if (!hasCachedWindowsTerminalCapabilities()) {
+    return {}
+  }
+  const capabilities = getCachedWindowsTerminalCapabilities()
+  return {
+    wslAvailable: capabilities.wslAvailable,
+    availableWslDistros: capabilities.wslDistros
+  }
+}
 
 export function resetLocalPreflightContextCachesForTests(): void {
   wslPreflightContextsByDistro.clear()

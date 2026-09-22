@@ -58,12 +58,13 @@ export const getSshGitProviderMock: IpcMock = vi.fn()
 export const tryDeleteWslUncPathMock: IpcMock = vi.fn()
 export const recordCrashBreadcrumbMock: IpcMock = vi.fn()
 export const promoteLocalDownloadedFolderMock: IpcMock = vi.fn()
+export const showItemInFolderMock: IpcMock = vi.fn()
 
 export const electronMock = {
   BrowserWindow: { fromWebContents: fromWebContentsMock },
   dialog: { showSaveDialog: showSaveDialogMock, showOpenDialog: showOpenDialogMock },
   ipcMain: { handle: handleMock },
-  shell: { trashItem: trashItemMock }
+  shell: { trashItem: trashItemMock, showItemInFolder: showItemInFolderMock }
 }
 
 export const fsPromisesMock = {
@@ -239,6 +240,7 @@ const ALL_MOCKS = [
 
 /** Resets every filesystem IPC mock and reinstalls the defaults every suite starts from. */
 export function resetFilesystemIpcMocks(): void {
+  showItemInFolderMock.mockReset()
   handlers.clear()
   for (const mock of ALL_MOCKS) {
     mock.mockReset()

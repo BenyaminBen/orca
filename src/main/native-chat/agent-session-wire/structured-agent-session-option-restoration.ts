@@ -17,6 +17,26 @@ export async function readNativeSessionOptions(input: {
   delete restored.model
   delete restored.effort
   delete restored.fastMode
+  if (
+    reported.permissions?.policy ||
+    reported.permissions?.desired ||
+    reported.permissions?.pending
+  ) {
+    delete restored.permissionState
+    delete restored.approvalPolicy
+    delete restored.approvalsReviewer
+    if (reported.permissions.desired || reported.permissions.pending) {
+      restored.permissions = reported.permissions.desired ?? reported.permissions.pending!
+    }
+    if (reported.permissions.policy) {
+      restored.permissionState = JSON.stringify(reported.permissions.policy)
+    }
+    if (reported.permissions.recovery) {
+      restored.permissionRecovery = JSON.stringify(reported.permissions.recovery)
+    } else {
+      delete restored.permissionRecovery
+    }
+  }
   for (const key of skipped) {
     delete restored[key]
   }

@@ -7,6 +7,10 @@ import { sanitizeLocalDownloadFilename } from '../local-download-filename'
 import { promoteLocalDownloadedFolder } from '../local-downloaded-folder-promotion'
 import { requireSshFilesystemProvider } from '../providers/ssh-filesystem-dispatch'
 import { isENOENT } from './filesystem-path-containment'
+import {
+  completeDownload,
+  validatePostDownloadAction
+} from './filesystem/filesystem-download-completion'
 
 type DownloadFolderResult = { canceled: true } | { canceled: false; destinationPath: string }
 
@@ -51,10 +55,15 @@ export function registerFilesystemDownloadFolderHandlers(): void {
     'fs:downloadFolder',
     async (
       event,
-      args: { dirPath?: string; connectionId?: string }
+      args: {
+        dirPath?: string
+        connectionId?: string
+        postDownloadAction?: 'reveal'
+      }
     ): Promise<DownloadFolderResult> => {
       const dirPath = validateRequiredString(args?.dirPath, 'dirPath')
       const connectionId = validateRequiredString(args?.connectionId, 'connectionId')
+      const action = validatePostDownloadAction(args?.postDownloadAction)
       const provider = requireSshFilesystemProvider(connectionId)
       if (!provider.downloadFolder) {
         throw new Error(
@@ -96,7 +105,8 @@ export function registerFilesystemDownloadFolderHandlers(): void {
           await provider.downloadFolder(dirPath, tempPath, { signal: abortController.signal })
           abortController.signal.throwIfAborted()
           await promoteLocalDownloadedFolder(tempPath, destinationPath, abortController.signal)
-          return { canceled: false, destinationPath }
+          abortController.signal.throwIfAborted()
+          return completeDownload(destinationPath, action)
         } finally {
           await cleanupLocalTransferDirectory(tempPath)
         }

@@ -9,6 +9,7 @@ import { isCodexAppServerUnsupportedError } from './codex-app-server-session'
 import type { CodexDispatchEchoes } from './codex-structured-dispatch-echo'
 import { DISPATCH_REJECTED_CODEX_QUEUE_FULL } from '../../shared/structured-agent-session-dispatch-rejection'
 import { decodeStructuredAgentSessionOptionValue } from '../../shared/structured-agent-session-option-codec'
+import { selectedCodexPermissionPolicy } from './codex-structured-permissions'
 
 // Writing a Codex turn and learning which message landed where, which are not
 // the same event. `turn/start` answers as soon as Codex owns the message, but a
@@ -17,16 +18,15 @@ import { decodeStructuredAgentSessionOptionValue } from '../../shared/structured
 // echoed only when the running turn reaches it. So the response proves
 // admission and nothing about identity, which the echo settles later.
 
-/** Keys Codex accepts as per-turn overrides. An unlisted key would otherwise
- *  become an arbitrary client-controlled `turn/start` parameter. Permission posture is owned by
- *  Agent Permissions and applied when the thread opens. */
+/** Only declared options and the selected conversation policy reach `turn/start`. */
 const CODEX_TURN_OPTION_KEYS = new Set([
   'model',
   'effort',
   'approvalsReviewer',
   'personality',
   'serviceTier',
-  'fastMode'
+  'fastMode',
+  'permissions'
 ])
 
 export function isCodexTurnOptionKey(key: string): boolean {
@@ -57,20 +57,28 @@ function turnInputFor(body: AgentJournalMessageItem): Record<string, unknown>[] 
   return input
 }
 
-function codexTurnOptions(host: CodexTurnHost): Record<string, string> {
+function codexTurnOptions(host: CodexTurnHost): Record<string, unknown> {
   const options = Object.fromEntries(
-    [...host.options].filter(([key]) => key !== 'fastMode' && key !== 'serviceTier')
+    [...host.options].filter(
+      ([key]) =>
+        isCodexTurnOptionKey(key) &&
+        key !== 'fastMode' &&
+        key !== 'serviceTier' &&
+        key !== 'permissions'
+    )
   )
+  const permissions = selectedCodexPermissionPolicy(host.options)
+  const turnOptions = { ...options, ...permissions }
   const encodedFastMode = host.options.get('fastMode')
   if (encodedFastMode === undefined) {
-    return options
+    return turnOptions
   }
   const fastMode = decodeStructuredAgentSessionOptionValue('fastMode', encodedFastMode)
   if (typeof fastMode !== 'boolean') {
     throw new Error('codex fast mode must be encoded as true or false')
   }
   if (!fastMode) {
-    return { ...options, serviceTier: 'default' }
+    return { ...turnOptions, serviceTier: 'default' }
   }
   const model = host.options.get('model') ?? host.reportedOptions?.model
   const tierId = model ? host.fastModeTierByModel.get(model) : undefined
@@ -79,9 +87,9 @@ function codexTurnOptions(host: CodexTurnHost): Record<string, string> {
   // persists on the thread, so omitting would silently keep routing a paid tier we
   // cannot currently name, and discovery recovers the exact tier on a later turn.
   if (!tierId) {
-    return { ...options, serviceTier: 'default' }
+    return { ...turnOptions, serviceTier: 'default' }
   }
-  return { ...options, serviceTier: tierId }
+  return { ...turnOptions, serviceTier: tierId }
 }
 
 /**

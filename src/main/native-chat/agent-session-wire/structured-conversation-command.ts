@@ -19,6 +19,7 @@ import type { StructuredAgentSessionMutationContext } from './structured-agent-s
 import type { StructuredAgentSessionCaller } from './structured-agent-session-host-types'
 import type { StructuredAgentSessionHost } from './structured-agent-session-host'
 import { conversationCommandBlocked } from './structured-conversation-command-admission'
+import { readNativeSessionOptions } from './structured-agent-session-option-restoration'
 
 export type ConversationCommandParams = {
   envelope: AgentSessionMutationEnvelope
@@ -115,16 +116,13 @@ export function runStructuredConversationCommand(
           let effectiveOptions = record.options
           if (command === 'clear' && !prior) {
             try {
-              const options = await ctx.adapter.readOptions?.({ sessionId, fence: ctx.fence })
-              effectiveOptions = {
-                ...record.options,
-                ...(options
-                  ? {
-                      model: options.current.model,
-                      ...(options.current.effort ? { effort: options.current.effort } : {})
-                    }
-                  : {})
-              }
+              effectiveOptions =
+                (await readNativeSessionOptions({
+                  adapter: ctx.adapter,
+                  sessionId,
+                  fence: ctx.fence,
+                  priorOptions: record.options
+                })) ?? record.options
             } catch {
               return {
                 ok: false,

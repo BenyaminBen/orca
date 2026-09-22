@@ -15,7 +15,7 @@ import { createCodexJournalTranslator } from './codex-structured-journal-transla
 import { openCodexAppServerConnection } from './codex-app-server-connection'
 import { codexProcessIdentity, codexProviderHandleLink } from './codex-structured-owner-identity'
 import { buildCodexStructuredChildEnvironment } from './codex-structured-child-environment'
-import { openCodexThread } from './codex-structured-thread-open'
+import { openCodexThreadRestoringPermissions } from './codex-structured-permission-acquisition'
 import {
   closeCodexPublishedSession,
   handleCodexSessionExit
@@ -25,7 +25,7 @@ import {
   restoredCodexSessionOptions
 } from './codex-structured-session-options'
 import {
-  reconcileCodexFastModeOption,
+  restoreCodexFastModeOption,
   reportedCodexThreadOptions
 } from './codex-structured-fast-mode'
 import {
@@ -191,7 +191,14 @@ export async function acquireCodexStructuredSession(input: {
       })
     }
     acquisitions.assertCurrent(sessionId, attempt)
-    const opened = await openCodexThread(connection, launch, deps.requestTimeoutMs)
+    const options = restoredCodexSessionOptions(acquireInput.options)
+    const opened = await openCodexThreadRestoringPermissions({
+      connection,
+      launch,
+      options,
+      timeoutMs: deps.requestTimeoutMs,
+      assertCurrent: () => acquisitions.assertCurrent(sessionId, attempt)
+    })
     acquisitions.assertCurrent(sessionId, attempt)
     primaryThreadId = opened.threadId
     const restoreAdmission = translator?.restoreThread(opened.threadId, opened.thread ?? {})
@@ -220,7 +227,9 @@ export async function acquireCodexStructuredSession(input: {
       throw new Error(`codex app-server for session ${sessionId} exited while being acquired`)
     }
     acquisitions.assertCurrent(sessionId, attempt)
-    const options = restoredCodexSessionOptions(acquireInput.options)
+    if (opened.permissions) {
+      options.set('permissionState', JSON.stringify(opened.permissions))
+    }
     const fastModeCatalog =
       options.get('fastMode') === 'true' || options.has('serviceTier')
         ? await readCodexStructuredSessionOptionCatalog({
@@ -261,16 +270,7 @@ export async function acquireCodexStructuredSession(input: {
         ),
       ...(unbindReadingControl ? { unbindReadingControl } : {})
     }
-    if (fastModeCatalog) {
-      const model = opened.model ?? fastModeCatalog.result.current.model
-      reconcileCodexFastModeOption(session, {
-        fastModeTierByModel: fastModeCatalog.fastModeTierByModel,
-        currentFastMode: true,
-        model,
-        modelFastModeSupport: fastModeCatalog.result.models.find((entry) => entry.id === model)
-          ?.supportsFastMode
-      })
-    }
+    restoreCodexFastModeOption(session, fastModeCatalog, opened.model)
     turnCancellation.register(session)
     sessions.set(sessionId, session)
     for (const event of acquisition.drain()) {

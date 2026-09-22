@@ -1,10 +1,14 @@
 import { useCallback } from 'react'
 import type { CommentMarkdownLinkClickHandler } from '@/components/sidebar/CommentMarkdown'
-import { openDetectedFilePath } from '@/components/terminal-pane/terminal-file-open-routing'
 import { resolveNativeChatFileLink, type NativeChatFileLinkContext } from './native-chat-file-link'
+import {
+  handleNativeChatFileLink,
+  type NativeChatFileLinkActions
+} from './native-chat-file-link-actions'
 
 export function useNativeChatFileLinkClick(
-  context: NativeChatFileLinkContext | null
+  context: NativeChatFileLinkContext | null,
+  getActions?: (event: Parameters<CommentMarkdownLinkClickHandler>[0]) => NativeChatFileLinkActions
 ): CommentMarkdownLinkClickHandler | undefined {
   const openFileLink = useCallback<CommentMarkdownLinkClickHandler>(
     (event, href) => {
@@ -12,16 +16,9 @@ export function useNativeChatFileLinkClick(
       if (!target || !context) {
         return
       }
-      event.preventDefault()
-      event.stopPropagation()
-      openDetectedFilePath(target.absolutePath, target.line, target.column, {
-        worktreeId: context.worktreeId,
-        worktreePath: context.worktreePath,
-        runtimeEnvironmentId: context.runtimeEnvironmentId,
-        openWithSystemDefault: event.shiftKey
-      })
+      handleNativeChatFileLink(event, target, context, getActions?.(event))
     },
-    [context]
+    [context, getActions]
   )
   return context ? openFileLink : undefined
 }

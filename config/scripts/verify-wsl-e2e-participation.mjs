@@ -5,7 +5,11 @@ import { pathToFileURL } from 'node:url'
 export const WSL_TEST_TITLES = [
   'tab-bar + menu launches an agent inside WSL @tab-bar-agent-launch-golden',
   'WSL terminal keyboard paste preserves Linux shell content with one PTY owner',
-  'existing WSL terminal keeps paste runtime after default shell changes'
+  'existing WSL terminal keeps paste runtime after default shell changes',
+  'WSL native chat opens a folder under the canonical share',
+  'WSL native chat opens a folder under the legacy share',
+  'WSL native chat opens a Windows drive folder in a WSL project',
+  'WSL native chat rejects an existing folder outside the workspace'
 ]
 
 export function verifyWslParticipation(report) {
@@ -14,5 +18,5 @@ export function verifyWslParticipation(report) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   verifyWslParticipation(JSON.parse(readFileSync(process.argv[2], 'utf8')))
-  console.log('All three WSL scenarios passed three times without skips or retries.')
+  console.log('All seven WSL scenarios passed three times: 21 passes without skips or retries.')
 }

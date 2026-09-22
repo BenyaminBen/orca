@@ -1,4 +1,4 @@
-import { useCallback, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import {
   closeLinkActionRequest,
   type LinkActionRequest
@@ -13,7 +13,7 @@ import {
   resolveNativeChatHttpLinkSourceOwner
 } from './native-chat-http-link-source-owner'
 import { handleNativeChatWebLink } from './native-chat-web-link-actions'
-import { terminalLinkClickBehaviorFor } from '@/components/terminal-pane/terminal-link-click-behavior'
+import { nativeChatLinkClickBehaviorFor } from './native-chat-link-click-behavior'
 import { useNativeChatFileLinkClick } from './use-native-chat-file-link-click'
 
 export type NativeChatLinkActions = {
@@ -22,27 +22,84 @@ export type NativeChatLinkActions = {
   closeLinkActions: (dismissed?: LinkActionRequest) => void
 }
 
-/** Transcript links: file targets open in Orca, http(s) targets offer the same
- *  destination popover the terminal shows. */
+/** Transcript files and web links share the terminal's destination popover. */
 export function useNativeChatLinkActions(
   context: NativeChatFileLinkContext | null,
   rootRef: RefObject<HTMLElement | null>,
   scope: { sessionId: string | null; isVisible: boolean }
 ): NativeChatLinkActions {
-  const openFileLink = useNativeChatFileLinkClick(context)
   const [linkActionRequest, setLinkActionRequest] = useState<LinkActionRequest | null>(null)
+  const activeRequestRef = useRef<LinkActionRequest | null>(null)
+  const requestGenerationRef = useRef(0)
+  const mountedRef = useRef(true)
   const scopeKey = JSON.stringify([
     context?.worktreeId,
+    context?.worktreePath,
     context?.runtimeEnvironmentId,
     scope.sessionId
   ])
-  const [previousScopeKey, setPreviousScopeKey] = useState(scopeKey)
-  if (previousScopeKey !== scopeKey || (!scope.isVisible && linkActionRequest !== null)) {
-    setPreviousScopeKey(scopeKey)
+  const scopeIdentity = `${scopeKey}:${scope.isVisible ? 'visible' : 'hidden'}`
+  const scopeIdentityRef = useRef(scopeIdentity)
+  const [previousScopeIdentity, setPreviousScopeIdentity] = useState(scopeIdentity)
+  if (previousScopeIdentity !== scopeIdentity) {
+    requestGenerationRef.current += 1
+    scopeIdentityRef.current = scopeIdentity
+    activeRequestRef.current = null
+    setPreviousScopeIdentity(scopeIdentity)
     setLinkActionRequest(null)
   }
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      requestGenerationRef.current += 1
+    }
+  }, [])
+  const getFileActions = useCallback(
+    (event: Parameters<CommentMarkdownLinkClickHandler>[0]) => {
+      const anchor = event.currentTarget
+      const requestGeneration = requestGenerationRef.current
+      const requestScopeIdentity = scopeIdentityRef.current
+      const isCurrentScope = (): boolean =>
+        mountedRef.current && scopeIdentityRef.current === requestScopeIdentity && scope.isVisible
+      const isCurrentRequest = (): boolean =>
+        isCurrentScope() && requestGenerationRef.current === requestGeneration
+      return {
+        plainClickBehavior: nativeChatLinkClickBehaviorFor(useAppStore.getState().settings),
+        request: (request: LinkActionRequest) => {
+          if (isCurrentRequest()) {
+            activeRequestRef.current = request
+            setLinkActionRequest(request)
+          }
+        },
+        replaceRequest: (current: LinkActionRequest, replacement: LinkActionRequest) => {
+          if (!isCurrentRequest()) {
+            return
+          }
+          if (activeRequestRef.current !== current) {
+            return
+          }
+          activeRequestRef.current = replacement
+          setLinkActionRequest((active) => (active === current ? replacement : active))
+        },
+        isCurrentRequest,
+        isCurrentScope,
+        restoreFocus: () =>
+          (anchor.isConnected ? anchor : rootRef.current)?.focus({ preventScroll: true })
+      }
+    },
+    [rootRef, scope.isVisible]
+  )
+  const openFileLink = useNativeChatFileLinkClick(context, getFileActions)
   const closeLinkActions = useCallback((dismissed?: LinkActionRequest) => {
-    setLinkActionRequest((current) => closeLinkActionRequest(current, dismissed))
+    const current = activeRequestRef.current
+    const next = closeLinkActionRequest(current, dismissed)
+    if (next === current) {
+      return
+    }
+    requestGenerationRef.current += 1
+    activeRequestRef.current = next
+    setLinkActionRequest(next)
   }, [])
 
   const onLinkClick = useCallback<CommentMarkdownLinkClickHandler>(
@@ -50,6 +107,9 @@ export function useNativeChatLinkActions(
       if (!context) {
         return
       }
+      requestGenerationRef.current += 1
+      activeRequestRef.current = null
+      setLinkActionRequest(null)
       const route = routeNativeChatHref(href)
       if (route.kind === 'file') {
         openFileLink?.(event, href)
@@ -62,12 +122,7 @@ export function useNativeChatLinkActions(
       // Read at click time: settings and workspace ownership must not re-render the transcript.
       const state = useAppStore.getState()
       const sourceOwner = resolveNativeChatHttpLinkSourceOwner(state, context.worktreeId)
-      const plainClickBehavior =
-        state.settings?.terminalLinkClickBehavior === undefined
-          ? state.settings?.terminalLinkActionPopoverEnabled === false
-            ? 'open'
-            : 'actions'
-          : terminalLinkClickBehaviorFor(state.settings)
+      const plainClickBehavior = nativeChatLinkClickBehaviorFor(state.settings)
       const anchor = event.currentTarget
       handleNativeChatWebLink(event, route.url, {
         worktreeId: context.worktreeId,
@@ -81,7 +136,10 @@ export function useNativeChatLinkActions(
         plainClickBehavior,
         restoreFocus: () =>
           (anchor.isConnected ? anchor : rootRef.current)?.focus({ preventScroll: true }),
-        request: setLinkActionRequest
+        request: (request) => {
+          activeRequestRef.current = request
+          setLinkActionRequest(request)
+        }
       })
     },
     [context, openFileLink, rootRef]

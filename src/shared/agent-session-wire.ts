@@ -1,3 +1,4 @@
+import type { CodexPermissionOptions } from './codex-permissions'
 import type {
   AgentSessionBackgroundTask,
   AgentSessionBackgroundTaskState
@@ -339,6 +340,7 @@ export type AgentSessionCommandsResult = {
 /** Provider-reported choices and effective next-turn values. Additive read-only
  *  surface so older hosts can reject it without changing structured v1 writes. */
 export type AgentSessionOptionsResult = {
+  permissions?: CodexPermissionOptions
   rewind?: AgentSessionRewindSupport
   conversationCommands?: readonly AgentSessionConversationCommand[]
   models: AgentSessionModelOption[]

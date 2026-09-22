@@ -5,6 +5,7 @@ import type {
 import { decodeStructuredAgentSessionOptionValue } from '../../shared/structured-agent-session-option-codec'
 import type { CodexOpenedThread } from './codex-structured-thread-open'
 import type { CodexSession } from './codex-structured-session-state'
+import type { CodexSessionOptionCatalog } from './codex-structured-model-catalog'
 
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null
@@ -63,12 +64,31 @@ export function reportedCodexThreadOptions(
   opened: CodexOpenedThread
 ): CodexSession['reportedOptions'] {
   return {
+    ...(opened.permissions ? { permissions: opened.permissions } : {}),
     ...(opened.model ? { model: opened.model } : {}),
     ...(opened.effort ? { effort: opened.effort } : {}),
     ...('serviceTier' in opened
       ? { serviceTier: opened.serviceTier ?? null, serviceTierKnown: true as const }
       : {})
   }
+}
+
+export function restoreCodexFastModeOption(
+  session: CodexSession,
+  catalog: CodexSessionOptionCatalog | null,
+  openedModel: string | undefined
+): void {
+  if (!catalog) {
+    return
+  }
+  const model = openedModel ?? catalog.result.current.model
+  reconcileCodexFastModeOption(session, {
+    fastModeTierByModel: catalog.fastModeTierByModel,
+    currentFastMode: true,
+    model,
+    modelFastModeSupport: catalog.result.models.find((entry) => entry.id === model)
+      ?.supportsFastMode
+  })
 }
 
 export function reconcileCodexFastModeOption(

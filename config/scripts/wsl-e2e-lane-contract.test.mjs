@@ -51,17 +51,20 @@ describe('real WSL terminal lane', () => {
       '"$WSL_CHANGED" | node config/scripts/pr-e2e-source-routing.mjs --wsl-source'
     )
     const workflow = parse(read('.github/workflows/windows-wsl-e2e.yml'))
+    expect(workflow.jobs['wsl-terminal'].env.ORCA_E2E_WSL_VERSION).toBe('1')
     const steps = workflow.jobs['wsl-terminal'].steps
     expect(steps[0].with.ref).toBe('${{ inputs.ref || github.sha }}')
     expect(steps.some((step) => step.uses === './.github/actions/setup-wsl-test-runtime')).toBe(
       true
     )
-    const exercise = steps.find((step) => step.name === 'Exercise real WSL launch and paste')
+    const exercise = steps.find(
+      (step) => step.name === 'Exercise real WSL terminals and native chat folders'
+    )
     expect(exercise.run.split(/\s+/).filter((arg) => arg.startsWith('--repeat-each='))).toEqual([
       '--repeat-each=3'
     ])
     expect(exercise.run).toContain('--grep "WSL"')
-    const receipt = steps.find((step) => step.name === 'Require all nine WSL executions')
+    const receipt = steps.find((step) => step.name === 'Require all 21 WSL executions')
     expect(receipt.if).toBe('always()')
     expect(receipt.run).toBe(
       'node config/scripts/verify-wsl-e2e-participation.mjs test-results/wsl-results.json'

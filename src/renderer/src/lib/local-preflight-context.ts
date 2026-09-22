@@ -9,17 +9,17 @@ import {
 import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import type { Repo } from '../../../shared/repo-types'
 import type { Worktree } from '../../../shared/worktree/types'
-import { getIndexedRepoMap, getIndexedWorktreeById } from '@/store/worktree-repo-index'
+import { parseWorkspaceKey } from '../../../shared/workspace-scope'
+import { getIndexedRepoMap } from '@/store/worktree-repo-index'
+import { findKnownWorktreeById } from '@/store/slices/worktrees/listing/detected-worktree-meta'
 import { getProviderRuntimeContextKey } from './provider-runtime-context'
 import { getRendererAppPlatform } from './renderer-app-platform'
 import {
-  getCachedWindowsTerminalCapabilities,
-  hasCachedWindowsTerminalCapabilities
-} from './windows-terminal-capabilities'
-import {
+  getCachedLocalProjectRuntimeWslContext,
   getProjectRuntimePreflightContext,
   getWslPreflightContext,
-  type LocalPreflightContext
+  type LocalPreflightContext,
+  type LocalProjectRuntimeWslContext
 } from './local-preflight-context-cache'
 
 export { localPreflightContextKey } from './local-preflight-context-key'
@@ -35,17 +35,16 @@ export {
 type LocalProjectRuntimeState = Pick<
   AppState,
   'activeRepoId' | 'activeWorktreeId' | 'projects' | 'repos' | 'settings' | 'worktreesByRepo'
->
-
-// Why: the shared indexes are WeakMap-keyed on slice identity, so a fresh `{}`
-// or `[]` fallback would miss the cache on every read.
-const EMPTY_WORKTREES_BY_REPO: AppState['worktreesByRepo'] = {}
-const EMPTY_REPOS: AppState['repos'] = []
-
-type LocalProjectRuntimeWslContext = {
-  wslAvailable?: boolean
-  availableWslDistros?: readonly string[] | null
+> & {
+  detectedWorktreesByRepo?: AppState['detectedWorktreesByRepo']
 }
+
+// Why: the shared indexes are WeakMap-keyed on slice identity, so fresh
+// fallbacks would miss the cache on every read.
+const EMPTY_WORKTREES_BY_REPO: AppState['worktreesByRepo'] = {}
+const EMPTY_DETECTED_WORKTREES_BY_REPO: AppState['detectedWorktreesByRepo'] = {}
+const EMPTY_FOLDER_WORKSPACES: AppState['folderWorkspaces'] = []
+const EMPTY_REPOS: AppState['repos'] = []
 
 /** Extracts a WSL distribution name from supported UNC path forms. */
 export function getWslDistroFromPath(path?: string | null): string | null {
@@ -248,19 +247,6 @@ export function getLocalAgentPreflightContext(
   return undefined
 }
 
-function getCachedLocalProjectRuntimeWslContext(): LocalProjectRuntimeWslContext {
-  // Why: preflight selectors are synchronous. Reuse an existing capability
-  // answer when available without spawning WSL probes from store reads.
-  if (!hasCachedWindowsTerminalCapabilities()) {
-    return {}
-  }
-  const capabilities = getCachedWindowsTerminalCapabilities()
-  return {
-    wslAvailable: capabilities.wslAvailable,
-    availableWslDistros: capabilities.wslDistros
-  }
-}
-
 function getLocalPreflightWslDistro(state: AppState, worktreeId?: string | null): string | null {
   const activeWorktree = getLocalWorktree(state, worktreeId)
   const repo = getLocalRuntimeRepoForWorktree(state, activeWorktree)
@@ -308,12 +294,18 @@ function getLocalWorktree(
   worktreeId?: string | null
 ): Pick<Worktree, 'id' | 'repoId' | 'projectId' | 'path' | 'hostId'> | null {
   const targetWorktreeId = worktreeId ?? state.activeWorktreeId
-  if (!targetWorktreeId) {
+  if (!targetWorktreeId || parseWorkspaceKey(targetWorktreeId)?.type === 'folder') {
     return null
   }
   return (
-    getIndexedWorktreeById(state.worktreesByRepo ?? EMPTY_WORKTREES_BY_REPO, targetWorktreeId) ??
-    null
+    findKnownWorktreeById(
+      {
+        worktreesByRepo: state.worktreesByRepo ?? EMPTY_WORKTREES_BY_REPO,
+        detectedWorktreesByRepo: state.detectedWorktreesByRepo ?? EMPTY_DETECTED_WORKTREES_BY_REPO,
+        folderWorkspaces: EMPTY_FOLDER_WORKSPACES
+      },
+      targetWorktreeId
+    ) ?? null
   )
 }
 

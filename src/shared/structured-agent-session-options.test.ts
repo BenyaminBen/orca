@@ -4,11 +4,41 @@ import { buildNativeChatSessionOptionSnapshot } from './native-chat-session-opti
 import { createNativeChatSessionOptionRecord } from './native-chat-session-option-state'
 import {
   applyStructuredAgentSessionOptions,
+  commitStructuredAgentSessionOptionValues,
   createStructuredAgentSessionOptionState,
   structuredAgentSessionOptionSnapshot
 } from './structured-agent-session-options'
+import { codexPermissionPolicy } from './codex-permissions'
 
 describe('structured agent session options', () => {
+  it('retains failed restoration when another option mutation returns the full native option record', () => {
+    const recovery = {
+      desired: 'full-access' as const,
+      effective: codexPermissionPolicy('ask-for-approval')
+    }
+    const state = {
+      ...createStructuredAgentSessionOptionState('codex'),
+      permissions: {
+        current: 'ask-for-approval' as const,
+        desired: 'full-access' as const,
+        restoration: 'failed' as const,
+        recovery,
+        choices: []
+      }
+    }
+    const next = commitStructuredAgentSessionOptionValues(state, {
+      model: 'model',
+      permissions: 'full-access',
+      permissionRecovery: JSON.stringify(recovery)
+    })
+    expect(next.permissions).toMatchObject({
+      desired: 'full-access',
+      current: 'ask-for-approval',
+      restoration: 'failed',
+      recovery
+    })
+    expect(next.permissions?.pending).toBeUndefined()
+  })
   it('projects native Codex selects while bridge Codex keeps its agent picker', () => {
     const state = applyStructuredAgentSessionOptions(
       createStructuredAgentSessionOptionState('codex'),
@@ -31,7 +61,11 @@ describe('structured agent session options', () => {
     )
 
     const structured = structuredAgentSessionOptionSnapshot(state)
-    expect(structured.map((descriptor) => descriptor.id)).toEqual(['model', 'effort'])
+    expect(structured.map((descriptor) => descriptor.id)).toEqual([
+      'model',
+      'effort',
+      'permissions'
+    ])
     expect(structured[0]).toMatchObject({
       settable: true,
       kind: { type: 'select', currentValue: 'account-model' }
@@ -106,9 +140,17 @@ describe('structured agent session options', () => {
     )
 
     const snapshot = structuredAgentSessionOptionSnapshot(state)
-    expect(snapshot.map((descriptor) => descriptor.id)).toEqual(['model', 'effort'])
-    expect(snapshot.every((descriptor) => descriptor.settable)).toBe(true)
+    expect(snapshot.map((descriptor) => descriptor.id)).toEqual(['model', 'effort', 'permissions'])
+    expect(
+      snapshot
+        .filter((descriptor) => descriptor.id !== 'permissions')
+        .every((descriptor) => descriptor.settable)
+    ).toBe(true)
     expect(snapshot.every((descriptor) => descriptor.action === undefined)).toBe(true)
+    expect(snapshot.find(({ id }) => id === 'permissions')).toMatchObject({
+      settable: false,
+      valueSource: 'unknown'
+    })
   })
 
   it('projects Fast mode only from positive session and model capability', () => {
@@ -150,7 +192,10 @@ describe('structured agent session options', () => {
       ],
       current: { model: 'account-model' }
     })
-    expect(structuredAgentSessionOptionSnapshot(absent).map(({ id }) => id)).toEqual(['model'])
+    expect(structuredAgentSessionOptionSnapshot(absent).map(({ id }) => id)).toEqual([
+      'model',
+      'permissions'
+    ])
     expect(absent.record.valuesByModel['account-model']?.fastMode).toBeUndefined()
   })
 

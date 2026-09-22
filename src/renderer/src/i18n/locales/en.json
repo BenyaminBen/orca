@@ -206,6 +206,10 @@
         "restartRequired": "Restart required",
         "unavailable": "Browser identity is unavailable."
       }
+    },
+    "general": {
+      "fullAccessConfirmation": "Ask Before Enabling Full Access",
+      "fullAccessConfirmationDescription": "Confirm before a chat switches to unrestricted commands and network access."
     }
   },
   "menu": {
@@ -17286,7 +17290,7 @@
         "pillAccessibleName": "{{value0}} {{value1}}",
         "valueIsDefault": "Default",
         "valueNotReported": "Not reported",
-        "sentNotConfirmed": "Sent to the agent — not confirmed",
+        "sentNotConfirmed": "Sent to the agent - not confirmed",
         "setWhenSessionStarts": "Set when the session starts.",
         "availableAfterSessionStarts": "Available after the session starts.",
         "optionUpdateFailed": "Could not update option",
@@ -17514,7 +17518,36 @@
         "title": "Drop to attach to this chat",
         "subtitle": "Files are added to your message as paths the agent can read."
       },
-      "copyCode": "Copy code"
+      "copyCode": "Copy code",
+      "permissions": {
+        "unknownLabel": "Unknown",
+        "confirmTitle": "Enable full access?",
+        "confirmDescription": "Allow this chat to run commands without sandbox restrictions or approval, including network access.",
+        "confirm": "Enable full access",
+        "updateFailed": "Could not update permissions",
+        "label": "Permissions",
+        "nextMessage": "Applies to the next message; awaiting confirmation.",
+        "custom": "Custom permissions detected.",
+        "unknown": "Current permissions have not been reported.",
+        "restoring": "Restoring permissions...",
+        "pending": "Selected permissions will be applied to the next message.",
+        "restoreFailed": "Selected permissions are not confirmed.",
+        "selectedAndActive": "Selected: {{desired}}. Active: {{current}}.",
+        "activeForMessages": "Messages use the active permissions.",
+        "retry": "Retry restoration"
+      },
+      "file": {
+        "openFailed": "Could not open this path. It may no longer be available.",
+        "revealFailed": "Could not reveal this file. It may no longer be available.",
+        "openInOrca": "Open in Orca",
+        "downloadAndReveal": "Download and reveal in {{manager}}",
+        "reveal": "Reveal in {{manager}}",
+        "folderOutsideWorkspace": "This folder is outside the current workspace. Use the file manager to open it."
+      },
+      "image": {
+        "openFailed": "Could not open the image. The file may no longer be available.",
+        "openInPreview": "Open in Orca preview"
+      }
     },
     "tab": {
       "bar": {
